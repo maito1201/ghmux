@@ -81,6 +81,12 @@ public enum Ghostty {
         public func send(_ text: String) {
             surfaceView?.sendText(text)
         }
+
+        /// この surface をキーボードフォーカスにする。
+        public func focus() {
+            guard let surfaceView else { return }
+            surfaceView.window?.makeFirstResponder(surfaceView)
+        }
     }
 }
 

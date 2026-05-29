@@ -27,4 +27,9 @@ final class TerminalHostView: NSView {
     func sendToTerminal(_ text: String) {
         surface.send(text)
     }
+
+    /// この端末をキーボードフォーカスにする。
+    func focusTerminal() {
+        surface.focus()
+    }
 }

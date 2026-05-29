@@ -53,6 +53,11 @@ final class PaneViewController: NSViewController {
         watchTask?.cancel()
     }
 
+    /// 端末をキーボードフォーカスにする (分割直後・フォーカス移動時に呼ぶ)。
+    func focusTerminal() {
+        terminalHost.focusTerminal()
+    }
+
     // MARK: - Issue 投入
 
     private func handleIssueSubmission(_ urlString: String) {

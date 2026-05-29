@@ -33,11 +33,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         appMenuItem.submenu = appMenu
 
-        // Phase 3 で Cmd+D / Cmd+Shift+D を追加する。
-        let viewMenuItem = NSMenuItem()
-        mainMenu.addItem(viewMenuItem)
-        let viewMenu = NSMenu(title: "View")
-        viewMenuItem.submenu = viewMenu
+        // Pane メニュー: 分割 / クローズ / フォーカス移動。
+        // target=nil でファーストレスポンダ経由 → WorkspaceViewController が処理する。
+        let paneMenuItem = NSMenuItem()
+        mainMenu.addItem(paneMenuItem)
+        let paneMenu = NSMenu(title: "Pane")
+
+        let splitRight = paneMenu.addItem(
+            withTitle: "Split Right",
+            action: Selector(("splitPaneRight:")),
+            keyEquivalent: "d")
+        splitRight.keyEquivalentModifierMask = [.command]
+
+        let splitDown = paneMenu.addItem(
+            withTitle: "Split Down",
+            action: Selector(("splitPaneDown:")),
+            keyEquivalent: "d")
+        splitDown.keyEquivalentModifierMask = [.command, .shift]
+
+        paneMenu.addItem(NSMenuItem.separator())
+
+        let closePane = paneMenu.addItem(
+            withTitle: "Close Pane",
+            action: Selector(("closePane:")),
+            keyEquivalent: "w")
+        closePane.keyEquivalentModifierMask = [.command]
+
+        paneMenu.addItem(NSMenuItem.separator())
+
+        let nextPane = paneMenu.addItem(
+            withTitle: "Focus Next Pane",
+            action: Selector(("focusNextPane:")),
+            keyEquivalent: "]")
+        nextPane.keyEquivalentModifierMask = [.command]
+
+        let prevPane = paneMenu.addItem(
+            withTitle: "Focus Previous Pane",
+            action: Selector(("focusPreviousPane:")),
+            keyEquivalent: "[")
+        prevPane.keyEquivalentModifierMask = [.command]
+
+        paneMenuItem.submenu = paneMenu
 
         NSApp.mainMenu = mainMenu
     }
