@@ -35,6 +35,16 @@ public struct AutoPromptRules: Sendable {
         self.templates = templates
     }
 
+    /// 設定 (`GmuxConfig.AutoPrompts`) からルールを作る。
+    public init(config: GmuxConfig.AutoPrompts) {
+        var t = Templates()
+        t.ciFailed = config.ciFailed
+        t.changesRequested = config.changesRequested
+        t.commented = config.commented
+        t.mergeConflict = config.mergeConflict
+        self.templates = t
+    }
+
     /// `PullRequestWatcher.Event` をプロンプトに変換。
     /// 対応するルールが無い (= 何もしないべき) イベントには `nil` を返す。
     public func prompt(for event: PullRequestWatcher.Event, prURL: URL) -> String? {

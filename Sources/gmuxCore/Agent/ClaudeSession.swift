@@ -17,10 +17,11 @@ public final class ClaudeSession {
     }
 
     /// Issue を起点に claude を起動する。シェルに `claude '<prompt>'` を送る。
-    public func start(issue: GitHub.Issue) {
+    /// `promptTemplate` はプレースホルダ {issue_url} {number} {title} {body} を含む文字列。
+    public func start(issue: GitHub.Issue, promptTemplate: String = GmuxConfig.default.initialPrompt) {
         guard !started else { return }
         started = true
-        let prompt = ClaudePromptBuilder.initialPrompt(for: issue)
+        let prompt = ClaudePromptBuilder.initialPrompt(for: issue, template: promptTemplate)
         let command = "claude " + ClaudePromptBuilder.shellQuote(prompt)
         sink(command + "\n")
     }
@@ -35,16 +36,15 @@ public final class ClaudeSession {
 /// プロンプト文字列の生成とシェルエスケープ (純粋ロジック)。
 public enum ClaudePromptBuilder {
 
-    /// Issue から初回プロンプトを組み立てる。
-    public static func initialPrompt(for issue: GitHub.Issue) -> String {
-        """
-        GitHub Issue \(issue.url.absoluteString) に取り組んでください。\
-        実装が完了したら、この Issue を closes するプルリクエストを作成してください。
-
-        # \(issue.title)
-
-        \(issue.body)
-        """
+    /// テンプレートと Issue から初回プロンプトを組み立てる。
+    /// プレースホルダ: {issue_url} {number} {title} {body}
+    public static func initialPrompt(for issue: GitHub.Issue, template: String) -> String {
+        AutoPromptRules.render(template, [
+            "issue_url": issue.url.absoluteString,
+            "number": String(issue.number),
+            "title": issue.title,
+            "body": issue.body,
+        ])
     }
 
     /// シェルの単一引用符で安全に囲む。内部の ' は '\'' に置換する。

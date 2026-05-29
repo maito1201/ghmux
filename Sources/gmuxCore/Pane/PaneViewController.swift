@@ -13,15 +13,17 @@ final class PaneViewController: NSViewController {
     private let terminalHost = TerminalHostView()
 
     private let client = GitHubClient()
-    private let autoPromptRules = AutoPromptRules()
+    /// ユーザー設定 (~/.config/gmux/config.toml)。
+    private let config = GmuxConfig.current
+    private lazy var autoPromptRules = AutoPromptRules(config: config.autoPrompts)
     private var session: ClaudeSession?
 
     /// 監視ループのキャンセル用タスク。
     private var prDiscoveryTask: Task<Void, Never>?
     private var watchTask: Task<Void, Never>?
 
-    /// PR/CI 監視の間隔 (秒)。
-    private let pollInterval: UInt64 = 15
+    /// PR/CI 監視の間隔 (秒)。設定から取得。
+    private lazy var pollInterval: UInt64 = UInt64(max(1, config.pollIntervalSeconds))
 
     override func loadView() {
         let root = NSView()
@@ -77,7 +79,7 @@ final class PaneViewController: NSViewController {
                     self?.terminalHost.sendToTerminal(text)
                 })
                 self.session = session
-                session.start(issue: issue)
+                session.start(issue: issue, promptTemplate: config.initialPrompt)
 
                 // Issue を参照する PR が現れるのを待つ。
                 startPRDiscovery(owner: parsed.owner, repo: parsed.repo, issueNumber: parsed.number)

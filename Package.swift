@@ -18,6 +18,10 @@ let package = Package(
         .library(name: "gmuxCore", targets: ["gmuxCore"]),
         .library(name: "Ghostty", targets: ["Ghostty"]),
     ],
+    dependencies: [
+        // TOML 設定ファイル (~/.config/gmux/config.toml) の読み書き。
+        .package(url: "https://github.com/LebJe/TOMLKit.git", from: "0.6.0"),
+    ],
     targets: [
         .executableTarget(
             name: "gmux",
@@ -26,7 +30,10 @@ let package = Package(
         ),
         .target(
             name: "gmuxCore",
-            dependencies: ["Ghostty"],
+            dependencies: [
+                "Ghostty",
+                .product(name: "TOMLKit", package: "TOMLKit"),
+            ],
             path: "Sources/gmuxCore"
         ),
         .target(

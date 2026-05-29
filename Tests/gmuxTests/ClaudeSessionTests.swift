@@ -47,9 +47,20 @@ struct ClaudeSessionTests {
     }
 
     @Test func initialPromptContainsIssueDetails() {
-        let prompt = ClaudePromptBuilder.initialPrompt(for: makeIssue(title: "Add X", body: "Do Y"))
+        let prompt = ClaudePromptBuilder.initialPrompt(
+            for: makeIssue(title: "Add X", body: "Do Y"),
+            template: GmuxConfig.default.initialPrompt
+        )
         #expect(prompt.contains("issues/42"))
         #expect(prompt.contains("Add X"))
         #expect(prompt.contains("Do Y"))
+    }
+
+    @Test func initialPromptUsesCustomTemplatePlaceholders() {
+        let prompt = ClaudePromptBuilder.initialPrompt(
+            for: makeIssue(title: "T", body: "B"),
+            template: "#{number} {title} :: {body} @ {issue_url}"
+        )
+        #expect(prompt == "#42 T :: B @ https://github.com/acme/widgets/issues/42")
     }
 }
