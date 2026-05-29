@@ -114,6 +114,16 @@ public struct GmuxConfig: Codable, Equatable, Sendable {
         try TOMLDecoder().decode(GmuxConfig.self, from: toml)
     }
 
+    /// 設定を TOML として書き出し、キャッシュも更新する (設定 UI から呼ぶ)。
+    /// 即時反映は「以後に作られるペイン / セッション」に効く。
+    public func save(to url: URL = GmuxConfig.defaultURL) throws {
+        let fm = FileManager.default
+        try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let toml = try TOMLEncoder().encode(self)
+        try toml.write(to: url, atomically: true, encoding: .utf8)
+        GmuxConfig.cached = self
+    }
+
     /// 注釈付きのデフォルト設定ファイルを書き出す。
     public static func writeDefaultFile(to url: URL) throws {
         let fm = FileManager.default

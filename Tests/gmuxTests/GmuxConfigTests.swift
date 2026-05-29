@@ -63,4 +63,26 @@ struct GmuxConfigTests {
         let config = try GmuxConfig.parse(GmuxConfig.defaultFileContents)
         #expect(config == GmuxConfig.default)
     }
+
+    /// 設定 UI の保存パス: encode → file → parse が値を保つ (複数行/改行込み)。
+    @Test func saveThenParseRoundTrips() throws {
+        let custom = GmuxConfig(
+            initialPrompt: "実装して: {issue_url}\n\n{title}\n{body}",
+            pollIntervalSeconds: 42,
+            autoPrompts: .init(
+                ciFailed: "CI fail {url}\n{failingChecks}",
+                changesRequested: "fix {reviewer}",
+                commented: "comment {body}",
+                mergeConflict: "conflict"
+            )
+        )
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("gmux-save-\(UUID().uuidString)")
+            .appendingPathComponent("config.toml")
+        defer { try? FileManager.default.removeItem(at: tmp.deletingLastPathComponent()) }
+
+        try custom.save(to: tmp)
+        let reloaded = try GmuxConfig.parse(String(contentsOf: tmp, encoding: .utf8))
+        #expect(reloaded == custom)
+    }
 }

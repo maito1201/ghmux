@@ -2,6 +2,7 @@ import AppKit
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var mainWindowController: MainWindowController?
+    private var settingsWindowController: SettingsWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         installMainMenu()
@@ -12,6 +13,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
+    }
+
+    @objc private func openSettings() {
+        if settingsWindowController == nil {
+            settingsWindowController = SettingsWindowController()
+        }
+        settingsWindowController?.show()
     }
 
     private func installMainMenu() {
@@ -25,6 +33,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)),
             keyEquivalent: ""
         )
+        appMenu.addItem(NSMenuItem.separator())
+        let settingsItem = appMenu.addItem(
+            withTitle: "設定…",
+            action: #selector(openSettings),
+            keyEquivalent: ","
+        )
+        settingsItem.target = self
         appMenu.addItem(NSMenuItem.separator())
         appMenu.addItem(
             withTitle: "Quit gmux",
