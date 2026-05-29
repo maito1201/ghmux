@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# vendor/bin/xcrun — Zig 0.15.2 用の xcrun ラッパー。
+# macOS SDK のパス問い合わせだけを CLT に向ける (Xcode.app の MacOSX26.5.sdk は
+# libSystem.tbd が arm64 を含まないため Zig 0.15.2 でリンク失敗する)。
+# それ以外 (metal, --find 等) は本物の xcrun に丸投げする。
+set -e
+
+REAL=/usr/bin/xcrun
+
+want_macos_sdk_path=0
+sdk=""
+in_show_sdk_path=0
+for arg in "$@"; do
+    case "$arg" in
+        --show-sdk-path) in_show_sdk_path=1 ;;
+        --sdk)           ;;  # 次の引数を sdk として受ける (下のループで処理)
+    esac
+done
+# 上のループは初歩的なので、もう一度引数列を走査して --sdk の値を捕捉
+prev=""
+for arg in "$@"; do
+    if [ "$prev" = "--sdk" ]; then sdk="$arg"; fi
+    prev="$arg"
+done
+
+if [ $in_show_sdk_path -eq 1 ] && [ "$sdk" = "macosx" ]; then
+    echo "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
+    exit 0
+fi
+
+exec "$REAL" "$@"

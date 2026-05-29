@@ -1,0 +1,26 @@
+{
+  "number": 100,
+  "title": "WIP: Implement dark mode",
+  "url": "https://github.com/acme/widgets/pull/100",
+  "state": "OPEN",
+  "isDraft": true,
+  "headRefName": "feature/dark-mode-wip",
+  "baseRefName": "main",
+  "mergeable": "CONFLICTING",
+  "statusCheckRollup": [
+    {
+      "name": "test",
+      "workflowName": "CI",
+      "status": "COMPLETED",
+      "conclusion": "FAILURE",
+      "detailsUrl": "https://github.com/acme/widgets/actions/runs/3"
+    },
+    {
+      "name": "lint",
+      "workflowName": "CI",
+      "status": "IN_PROGRESS",
+      "conclusion": null,
+      "detailsUrl": "https://github.com/acme/widgets/actions/runs/4"
+    }
+  ]
+}

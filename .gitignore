@@ -1,0 +1,17 @@
+.DS_Store
+.build/
+.swiftpm/
+*.xcodeproj/
+*.xcworkspace/
+Packages/*/Package.resolved
+/Packages/GhosttyKit/Vendored/
+vendor/ghostty/zig-out/
+vendor/ghostty/.zig-cache/
+*.dSYM
+*.dylib.dSYM
+/dist/
+vendor/zig/
+Vendored/
+.deprecated-CGhostty/
+# build-libghostty.sh が xcframework から同期する生成ヘッダ
+Sources/CGhostty/include/ghostty.h

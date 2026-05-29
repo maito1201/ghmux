@@ -1,0 +1,28 @@
+[
+  {
+    "number": 99,
+    "title": "Implement dark mode",
+    "url": "https://github.com/acme/widgets/pull/99",
+    "state": "OPEN",
+    "isDraft": false,
+    "headRefName": "feature/dark-mode",
+    "baseRefName": "main",
+    "mergeable": "MERGEABLE",
+    "statusCheckRollup": [
+      { "name": "test", "workflowName": "CI", "status": "COMPLETED", "conclusion": "SUCCESS", "detailsUrl": null }
+    ],
+    "body": "This implements the dashboard dark mode.\n\nCloses #42"
+  },
+  {
+    "number": 87,
+    "title": "Refactor settings panel",
+    "url": "https://github.com/acme/widgets/pull/87",
+    "state": "MERGED",
+    "isDraft": false,
+    "headRefName": "refactor/settings",
+    "baseRefName": "main",
+    "mergeable": "UNKNOWN",
+    "statusCheckRollup": [],
+    "body": "Unrelated refactor. Fixes #421"
+  }
+]

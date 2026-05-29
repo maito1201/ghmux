@@ -1,0 +1,8 @@
+// libghostty の C API (ghostty.h) を Swift から import するためのモジュール定義。
+// 実体 (シンボル) は binaryTarget の GhosttyKit.xcframework がリンク時に供給する。
+// SwiftPM の explicit module build では -I 内の modulemap を暗黙発見しないため、
+// この C ターゲットで明示的にモジュールを登録する。
+module CGhostty {
+    header "ghostty.h"
+    export *
+}

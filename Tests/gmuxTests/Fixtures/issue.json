@@ -1,0 +1,12 @@
+{
+  "number": 42,
+  "title": "Add dark mode",
+  "body": "We need a dark mode for the dashboard.\n\nAcceptance: a setting in preferences toggles it.",
+  "url": "https://github.com/acme/widgets/issues/42",
+  "state": "OPEN",
+  "author": { "login": "alice" },
+  "labels": [
+    { "name": "enhancement", "color": "a2eeef" },
+    { "name": "good first issue", "color": "7057ff" }
+  ]
+}

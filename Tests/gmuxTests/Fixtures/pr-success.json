@@ -1,0 +1,26 @@
+{
+  "number": 99,
+  "title": "Implement dark mode",
+  "url": "https://github.com/acme/widgets/pull/99",
+  "state": "OPEN",
+  "isDraft": false,
+  "headRefName": "feature/dark-mode",
+  "baseRefName": "main",
+  "mergeable": "MERGEABLE",
+  "statusCheckRollup": [
+    {
+      "name": "test",
+      "workflowName": "CI",
+      "status": "COMPLETED",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/acme/widgets/actions/runs/1"
+    },
+    {
+      "name": "lint",
+      "workflowName": "CI",
+      "status": "COMPLETED",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/acme/widgets/actions/runs/2"
+    }
+  ]
+}

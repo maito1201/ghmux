@@ -1,0 +1,16 @@
+[
+  {
+    "id": 5001,
+    "user": { "login": "bob" },
+    "state": "APPROVED",
+    "body": "Looks good!",
+    "submitted_at": "2026-05-28T03:30:00Z"
+  },
+  {
+    "id": 5002,
+    "user": { "login": "carol" },
+    "state": "CHANGES_REQUESTED",
+    "body": "Please add tests for the toggle behavior.",
+    "submitted_at": "2026-05-28T04:15:00Z"
+  }
+]
