@@ -134,41 +134,48 @@ final class PaneHeaderView: NSView, NSTextFieldDelegate {
         issueTitleLabel.setLink("⚠️ \(message)", url: nil)
     }
 
-    /// PR をクリック可能なリンクとして表示する。state でマージ/クローズも示す。
-    func showPR(number: Int, url: URL, state: GitHub.PullRequest.State) {
-        let suffix: String
-        switch state {
-        case .open:   suffix = ""
-        case .merged: suffix = " · ✅ Merged"
-        case .closed: suffix = " · 🚫 Closed"
-        }
-        prLabel.setLink("PR #\(number)\(suffix)", url: url)
+    /// PR をクリック可能なリンクとして表示する (番号のみ。状態はステータスバッジへ集約)。
+    func showPR(number: Int, url: URL) {
+        prLabel.setLink("PR #\(number)", url: url)
     }
 
     /// PR を探索中であることを示す。
     func showPRSearching() {
         prLabel.setLink("PR を探索中…", url: nil)
+        ciBadge.stringValue = ""
     }
 
     /// PR 探索のエラーを示す (gh 失敗など)。
     func showPRError(_ message: String) {
         prLabel.setLink("PR 探索エラー: \(message)", url: nil)
+        ciBadge.stringValue = ""
     }
 
-    /// CI 状態をアイコンで表す。
-    func showCIStatus(_ status: GitHub.CIStatus) {
-        switch status {
-        case .noChecks:
-            ciBadge.stringValue = ""
-        case .pending:
-            ciBadge.stringValue = "🟡 CI"
-            ciBadge.toolTip = "CI running"
-        case .success:
-            ciBadge.stringValue = "✅ CI"
-            ciBadge.toolTip = "CI passed"
-        case .failure(let jobs):
-            ciBadge.stringValue = "❌ CI"
-            ciBadge.toolTip = "CI failed: " + jobs.joined(separator: ", ")
+    /// PR 状態と CI を 1 つのステータスバッジに統合して表示する。
+    /// マージ/クローズ済みなら CI は出さず、その状態だけを示す。open のときのみ CI を示す。
+    func showStatus(prState: GitHub.PullRequest.State, ci: GitHub.CIStatus) {
+        switch prState {
+        case .merged:
+            ciBadge.stringValue = "✅ Merged"
+            ciBadge.toolTip = "Merged"
+        case .closed:
+            ciBadge.stringValue = "🚫 Closed"
+            ciBadge.toolTip = "Closed without merge"
+        case .open:
+            switch ci {
+            case .noChecks:
+                ciBadge.stringValue = ""
+                ciBadge.toolTip = nil
+            case .pending:
+                ciBadge.stringValue = "🟡 CI"
+                ciBadge.toolTip = "CI running"
+            case .success:
+                ciBadge.stringValue = "✅ CI"
+                ciBadge.toolTip = "CI passed"
+            case .failure(let jobs):
+                ciBadge.stringValue = "❌ CI"
+                ciBadge.toolTip = "CI failed: " + jobs.joined(separator: ", ")
+            }
         }
     }
 

@@ -109,8 +109,8 @@ final class PaneViewController: NSViewController {
                         forIssueNumber: issueNumber, owner: owner, repo: repo
                     ) {
                         await MainActor.run {
-                            self.header.showPR(number: pr.number, url: pr.url, state: pr.state)
-                            self.header.showCIStatus(GitHub.CIStatus.roll(pr.statusCheckRollup ?? []))
+                            self.header.showPR(number: pr.number, url: pr.url)
+                            self.header.showStatus(prState: pr.state, ci: GitHub.CIStatus.roll(pr.statusCheckRollup ?? []))
                             self.startWatching(prURL: pr.url)
                         }
                         return // 発見したら探索終了、監視へ移行
@@ -143,9 +143,9 @@ final class PaneViewController: NSViewController {
                     let snapshot = await watcher.snapshot()
                     await MainActor.run {
                         if let pr = snapshot {
-                            self.header.showPR(number: pr.number, url: pr.url, state: pr.state)
+                            self.header.showPR(number: pr.number, url: pr.url)
+                            self.header.showStatus(prState: pr.state, ci: ci)
                         }
-                        self.header.showCIStatus(ci)
                         self.handleEvents(events, prURL: prURL)
                     }
                 }
