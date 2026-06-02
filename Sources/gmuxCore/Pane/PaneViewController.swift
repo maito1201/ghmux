@@ -75,14 +75,18 @@ final class PaneViewController: NSViewController {
         Task { @MainActor in
             do {
                 let issue = try await client.fetchIssue(url: url)
-                header.showIssue(title: issue.title, number: issue.number)
+                header.showIssue(title: issue.title, number: issue.number, url: issue.url)
 
                 // ClaudeSession を起動 (PTY へ claude コマンドを送る)。
                 let session = ClaudeSession(sink: { [weak self] text in
                     self?.terminalHost.sendToTerminal(text)
                 })
                 self.session = session
-                session.start(issue: issue, promptTemplate: config.initialPrompt)
+                session.start(
+                    issue: issue,
+                    promptTemplate: config.initialPrompt,
+                    agentCommand: config.agentCommand
+                )
 
                 // Issue を参照する PR が現れるのを待つ。
                 header.showPRSearching()
@@ -105,7 +109,7 @@ final class PaneViewController: NSViewController {
                         forIssueNumber: issueNumber, owner: owner, repo: repo
                     ) {
                         await MainActor.run {
-                            self.header.showPR(number: pr.number, url: pr.url.absoluteString)
+                            self.header.showPR(number: pr.number, url: pr.url, state: pr.state)
                             self.header.showCIStatus(GitHub.CIStatus.roll(pr.statusCheckRollup ?? []))
                             self.startWatching(prURL: pr.url)
                         }
@@ -136,7 +140,11 @@ final class PaneViewController: NSViewController {
             while !Task.isCancelled {
                 if let events = try? await watcher.tick() {
                     let ci = await watcher.currentCIStatus()
+                    let snapshot = await watcher.snapshot()
                     await MainActor.run {
+                        if let pr = snapshot {
+                            self.header.showPR(number: pr.number, url: pr.url, state: pr.state)
+                        }
                         self.header.showCIStatus(ci)
                         self.handleEvents(events, prURL: prURL)
                     }

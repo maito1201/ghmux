@@ -29,6 +29,26 @@ struct ClaudeSessionTests {
         #expect(session.started)
     }
 
+    @Test func startUsesCustomAgentCommand() {
+        var sent: [String] = []
+        let session = ClaudeSession(sink: { sent.append($0) })
+        session.start(issue: makeIssue(), agentCommand: "codex exec {prompt}")
+        #expect(sent.count == 1)
+        #expect(sent[0].hasPrefix("codex exec '"))
+        #expect(sent[0].contains("issues/42"))
+        #expect(sent[0].hasSuffix("'\n"))
+    }
+
+    @Test func agentCommandSubstitutesPromptPlaceholder() {
+        let cmd = ClaudePromptBuilder.agentCommand("codex {prompt}", prompt: "do it")
+        #expect(cmd == "codex 'do it'")
+    }
+
+    @Test func agentCommandAppendsWhenNoPlaceholder() {
+        let cmd = ClaudePromptBuilder.agentCommand("claude", prompt: "do it")
+        #expect(cmd == "claude 'do it'")
+    }
+
     @Test func followUpPromptAppendsNewline() {
         var sent: [String] = []
         let session = ClaudeSession(sink: { sent.append($0) })

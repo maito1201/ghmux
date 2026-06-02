@@ -26,6 +26,7 @@ public final class SettingsWindowController: NSWindowController {
 final class SettingsViewController: NSViewController {
 
     private let initialPromptView = SettingsViewController.makeTextView(height: 200)
+    private let agentCommandField = NSTextField()
     private let intervalField = NSTextField()
     private let ciFailedView = SettingsViewController.makeTextView(height: 130)
     private let changesRequestedView = SettingsViewController.makeTextView(height: 130)
@@ -45,8 +46,10 @@ final class SettingsViewController: NSViewController {
 
         stack.addArrangedSubview(section(
             title: "初回プロンプト",
-            help: "Issue URL を貼ったとき claude へ渡す。プレースホルダ: {issue_url} {number} {title} {body}",
+            help: "Issue URL を貼ったときエージェントへ渡す。プレースホルダ: {issue_url} {number} {title} {body}",
             field: initialPromptView.scroll))
+
+        stack.addArrangedSubview(agentCommandSection())
 
         stack.addArrangedSubview(intervalSection())
 
@@ -163,6 +166,26 @@ final class SettingsViewController: NSViewController {
         return col
     }
 
+    private func agentCommandSection() -> NSView {
+        let titleLabel = NSTextField(labelWithString: "エージェント起動コマンド")
+        titleLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        let helpLabel = NSTextField(labelWithString: "{prompt} が初回プロンプトに置換される。例: claude {prompt} / codex {prompt}")
+        helpLabel.font = .systemFont(ofSize: 11)
+        helpLabel.textColor = .secondaryLabelColor
+        helpLabel.lineBreakMode = .byWordWrapping
+        helpLabel.maximumNumberOfLines = 0
+        agentCommandField.translatesAutoresizingMaskIntoConstraints = false
+        agentCommandField.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+        let col = NSStackView(views: [titleLabel, helpLabel, agentCommandField])
+        col.orientation = .vertical
+        col.alignment = .leading
+        col.spacing = 4
+        col.translatesAutoresizingMaskIntoConstraints = false
+        agentCommandField.widthAnchor.constraint(equalTo: col.widthAnchor).isActive = true
+        helpLabel.widthAnchor.constraint(equalTo: col.widthAnchor).isActive = true
+        return col
+    }
+
     private func intervalSection() -> NSView {
         let titleLabel = NSTextField(labelWithString: "PR / CI ポーリング間隔（秒）")
         titleLabel.font = .systemFont(ofSize: 13, weight: .semibold)
@@ -179,6 +202,7 @@ final class SettingsViewController: NSViewController {
 
     private func populate(from config: GmuxConfig) {
         initialPromptView.text.string = config.initialPrompt
+        agentCommandField.stringValue = config.agentCommand
         intervalField.stringValue = String(config.pollIntervalSeconds)
         ciFailedView.text.string = config.autoPrompts.ciFailed
         changesRequestedView.text.string = config.autoPrompts.changesRequested
@@ -189,8 +213,10 @@ final class SettingsViewController: NSViewController {
     private func buildConfig() -> GmuxConfig {
         let interval = Int(intervalField.stringValue.trimmingCharacters(in: .whitespaces))
             ?? GmuxConfig.current.pollIntervalSeconds
+        let cmd = agentCommandField.stringValue.trimmingCharacters(in: .whitespaces)
         return GmuxConfig(
             initialPrompt: initialPromptView.text.string,
+            agentCommand: cmd.isEmpty ? GmuxConfig.default.agentCommand : cmd,
             pollIntervalSeconds: max(1, interval),
             autoPrompts: .init(
                 ciFailed: ciFailedView.text.string,

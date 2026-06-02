@@ -68,6 +68,7 @@ struct GmuxConfigTests {
     @Test func saveThenParseRoundTrips() throws {
         let custom = GmuxConfig(
             initialPrompt: "実装して: {issue_url}\n\n{title}\n{body}",
+            agentCommand: "codex exec {prompt}",
             pollIntervalSeconds: 42,
             autoPrompts: .init(
                 ciFailed: "CI fail {url}\n{failingChecks}",

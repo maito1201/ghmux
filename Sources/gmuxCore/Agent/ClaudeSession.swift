@@ -16,13 +16,19 @@ public final class ClaudeSession {
         self.sink = sink
     }
 
-    /// Issue を起点に claude を起動する。シェルに `claude '<prompt>'` を送る。
-    /// `promptTemplate` はプレースホルダ {issue_url} {number} {title} {body} を含む文字列。
-    public func start(issue: GitHub.Issue, promptTemplate: String = GmuxConfig.default.initialPrompt) {
+    /// Issue を起点にエージェントを起動する。`agentCommand` の `{prompt}` を
+    /// シェルエスケープ済みの初回プロンプトに置換してシェルへ送る。
+    /// - promptTemplate: {issue_url} {number} {title} {body} を含むプロンプト雛形。
+    /// - agentCommand: 起動コマンド雛形 (例: `claude {prompt}` / `codex {prompt}`)。
+    public func start(
+        issue: GitHub.Issue,
+        promptTemplate: String = GmuxConfig.default.initialPrompt,
+        agentCommand: String = GmuxConfig.default.agentCommand
+    ) {
         guard !started else { return }
         started = true
         let prompt = ClaudePromptBuilder.initialPrompt(for: issue, template: promptTemplate)
-        let command = "claude " + ClaudePromptBuilder.shellQuote(prompt)
+        let command = ClaudePromptBuilder.agentCommand(agentCommand, prompt: prompt)
         sink(command + "\n")
     }
 
@@ -51,5 +57,16 @@ public enum ClaudePromptBuilder {
     /// 単一引用符内では改行・特殊文字をそのまま渡せる。
     public static func shellQuote(_ s: String) -> String {
         "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
+    /// エージェント起動コマンドを組み立てる。
+    /// `commandTemplate` 内の `{prompt}` をシェルエスケープ済みプロンプトに置換する。
+    /// `{prompt}` が無ければ末尾にエスケープ済みプロンプトを付与する (フォールバック)。
+    public static func agentCommand(_ commandTemplate: String, prompt: String) -> String {
+        let quoted = shellQuote(prompt)
+        if commandTemplate.contains("{prompt}") {
+            return commandTemplate.replacingOccurrences(of: "{prompt}", with: quoted)
+        }
+        return commandTemplate + " " + quoted
     }
 }

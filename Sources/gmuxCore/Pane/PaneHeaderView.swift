@@ -28,6 +28,39 @@ final class PasteableTextField: NSTextField {
     }
 }
 
+/// クリックで既定ブラウザに URL を開くラベル。URL 未設定時はただのラベルとして振る舞う。
+final class LinkLabel: NSTextField {
+    private(set) var url: URL?
+
+    /// リンクとして表示する。`url` が nil ならプレーンテキスト。
+    func setLink(_ text: String, url: URL?) {
+        self.url = url
+        if let url {
+            attributedStringValue = NSAttributedString(string: text, attributes: [
+                .foregroundColor: NSColor.linkColor,
+                .underlineStyle: NSUnderlineStyle.single.rawValue,
+                .font: font ?? NSFont.systemFont(ofSize: 11),
+            ])
+            toolTip = url.absoluteString
+        } else {
+            attributedStringValue = NSAttributedString(string: text, attributes: [
+                .foregroundColor: NSColor.secondaryLabelColor,
+                .font: font ?? NSFont.systemFont(ofSize: 11),
+            ])
+            toolTip = nil
+        }
+        window?.invalidateCursorRects(for: self)
+    }
+
+    override func resetCursorRects() {
+        if url != nil { addCursorRect(bounds, cursor: .pointingHand) }
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        if let url { NSWorkspace.shared.open(url) } else { super.mouseDown(with: event) }
+    }
+}
+
 /// CONCEPT.md の「Issue1 / PR1 CI Pass」相当のヘッダ表示。
 /// Issue URL 入力欄 + Issue タイトル + PR リンク + CI バッジ。
 final class PaneHeaderView: NSView, NSTextFieldDelegate {
@@ -36,8 +69,8 @@ final class PaneHeaderView: NSView, NSTextFieldDelegate {
     var onSubmitIssueURL: ((String) -> Void)?
 
     private let issueField = PasteableTextField()
-    private let issueTitleLabel = NSTextField(labelWithString: "")
-    private let prLabel = NSTextField(labelWithString: "PR: (none)")
+    private let issueTitleLabel = LinkLabel(labelWithString: "")
+    private let prLabel = LinkLabel(labelWithString: "PR: (none)")
     private let ciBadge = NSTextField(labelWithString: "")
 
     override init(frame frameRect: NSRect) {
@@ -92,29 +125,34 @@ final class PaneHeaderView: NSView, NSTextFieldDelegate {
 
     // MARK: - 表示更新 (すべて main thread から呼ぶ)
 
-    func showIssue(title: String, number: Int) {
-        issueTitleLabel.stringValue = "#\(number) \(title)"
+    /// Issue をクリック可能なリンクとして表示する。
+    func showIssue(title: String, number: Int, url: URL) {
+        issueTitleLabel.setLink("#\(number) \(title)", url: url)
     }
 
     func showIssueError(_ message: String) {
-        issueTitleLabel.stringValue = "⚠️ \(message)"
+        issueTitleLabel.setLink("⚠️ \(message)", url: nil)
     }
 
-    func showPR(number: Int, url: String) {
-        prLabel.stringValue = "PR #\(number)"
-        prLabel.toolTip = url
+    /// PR をクリック可能なリンクとして表示する。state でマージ/クローズも示す。
+    func showPR(number: Int, url: URL, state: GitHub.PullRequest.State) {
+        let suffix: String
+        switch state {
+        case .open:   suffix = ""
+        case .merged: suffix = " · ✅ Merged"
+        case .closed: suffix = " · 🚫 Closed"
+        }
+        prLabel.setLink("PR #\(number)\(suffix)", url: url)
     }
 
     /// PR を探索中であることを示す。
     func showPRSearching() {
-        prLabel.stringValue = "PR を探索中…"
-        prLabel.toolTip = nil
+        prLabel.setLink("PR を探索中…", url: nil)
     }
 
     /// PR 探索のエラーを示す (gh 失敗など)。
     func showPRError(_ message: String) {
-        prLabel.stringValue = "PR 探索エラー: \(message)"
-        prLabel.toolTip = message
+        prLabel.setLink("PR 探索エラー: \(message)", url: nil)
     }
 
     /// CI 状態をアイコンで表す。

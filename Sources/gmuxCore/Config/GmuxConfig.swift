@@ -7,9 +7,14 @@ import TOMLKit
 /// ユーザーはそれを編集して挙動を変えられる。
 public struct GmuxConfig: Codable, Equatable, Sendable {
 
-    /// Issue URL を貼ったときに claude へ渡す初回プロンプトのテンプレート。
+    /// Issue URL を貼ったときにエージェントへ渡す初回プロンプトのテンプレート。
     /// 使えるプレースホルダ: `{issue_url}` `{number}` `{title}` `{body}`
     public var initialPrompt: String
+
+    /// エージェントを起動するシェルコマンドのテンプレート。
+    /// `{prompt}` が初回プロンプト (シェルエスケープ済み) に置換される。
+    /// 例: `claude {prompt}` / `codex {prompt}` / `codex exec {prompt}`
+    public var agentCommand: String
 
     /// PR / CI のポーリング間隔 (秒)。
     public var pollIntervalSeconds: Int
@@ -33,6 +38,7 @@ public struct GmuxConfig: Codable, Equatable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case initialPrompt = "initial_prompt"
+        case agentCommand = "agent_command"
         case pollIntervalSeconds = "poll_interval_seconds"
         case autoPrompts = "auto_prompts"
     }
@@ -43,16 +49,19 @@ public struct GmuxConfig: Codable, Equatable, Sendable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let def = GmuxConfig.default
         self.initialPrompt = (try c.decodeIfPresent(String.self, forKey: .initialPrompt)) ?? def.initialPrompt
+        self.agentCommand = (try c.decodeIfPresent(String.self, forKey: .agentCommand)) ?? def.agentCommand
         self.pollIntervalSeconds = (try c.decodeIfPresent(Int.self, forKey: .pollIntervalSeconds)) ?? def.pollIntervalSeconds
         self.autoPrompts = (try c.decodeIfPresent(AutoPrompts.self, forKey: .autoPrompts)) ?? def.autoPrompts
     }
 
     public init(
         initialPrompt: String,
+        agentCommand: String,
         pollIntervalSeconds: Int,
         autoPrompts: AutoPrompts
     ) {
         self.initialPrompt = initialPrompt
+        self.agentCommand = agentCommand
         self.pollIntervalSeconds = pollIntervalSeconds
         self.autoPrompts = autoPrompts
     }
@@ -67,6 +76,7 @@ public struct GmuxConfig: Codable, Equatable, Sendable {
 
             {body}
             """,
+        agentCommand: "claude {prompt}",
         pollIntervalSeconds: 15,
         autoPrompts: AutoPrompts(
             ciFailed: "PR {url} の CI が失敗しました。失敗ジョブ: {failingChecks}\nログを確認して修正してください。",
@@ -136,7 +146,7 @@ public struct GmuxConfig: Codable, Equatable, Sendable {
         # gmux 設定ファイル
         # 変更は次回 gmux 起動時に反映されます。
 
-        # Issue の URL を貼ったときに claude へ渡す初回プロンプト。
+        # Issue の URL を貼ったときにエージェントへ渡す初回プロンプト。
         # 使えるプレースホルダ: {issue_url} {number} {title} {body}
         # (末尾の \\ は改行を含めないための TOML 記法)
         initial_prompt = \"\"\"
@@ -146,6 +156,10 @@ public struct GmuxConfig: Codable, Equatable, Sendable {
 
         {body}\\
         \"\"\"
+
+        # エージェントを起動するコマンド。{prompt} が初回プロンプト(エスケープ済み)に置換される。
+        # 例: "claude {prompt}" / "codex {prompt}" / "codex exec {prompt}"
+        agent_command = "claude {prompt}"
 
         # PR / CI のポーリング間隔（秒）
         poll_interval_seconds = 15
