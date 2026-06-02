@@ -117,14 +117,18 @@ final class WorkspaceViewController: NSViewController {
         }
         rootView = content
         // content がまだ workspace 直下に無ければ追加・固定する。
+        // safeAreaLayoutGuide に固定することで、fullSizeContentView + 透明タイトルバー時に
+        // トラフィックライト/タイトルバー分の上マージンが自動確保され、Issue 入力欄との重なりを防ぐ。
+        // フルスクリーン時はタイトルバーが隠れて safe area top が 0 になり、コンテンツが全面に広がる。
         if content.superview !== view {
             content.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview(content)
+            let guide = view.safeAreaLayoutGuide
             NSLayoutConstraint.activate([
-                content.topAnchor.constraint(equalTo: view.topAnchor),
-                content.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-                content.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-                content.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+                content.topAnchor.constraint(equalTo: guide.topAnchor),
+                content.leadingAnchor.constraint(equalTo: guide.leadingAnchor),
+                content.trailingAnchor.constraint(equalTo: guide.trailingAnchor),
+                content.bottomAnchor.constraint(equalTo: guide.bottomAnchor),
             ])
         }
     }
