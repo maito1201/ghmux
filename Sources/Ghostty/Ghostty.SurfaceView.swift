@@ -164,6 +164,11 @@ extension Ghostty {
             _ = keyAction(GHOSTTY_ACTION_PRESS, event: event)
         }
 
+        // interpretKeyEvents は矢印/削除キーなどを doCommand(by:) (moveLeft: 等) に変換する。
+        // 実際のキー処理は keyDown 内で ghostty_surface_key に渡しているため、ここでは何もしない。
+        // super に渡すと未処理コマンドとして NSBeep (エラー音) が鳴るので握り潰す。
+        public override func doCommand(by selector: Selector) {}
+
         @discardableResult
         private func keyAction(
             _ action: ghostty_input_action_e,
