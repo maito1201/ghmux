@@ -68,6 +68,7 @@ extension Ghostty {
         public override func setFrameSize(_ newSize: NSSize) {
             super.setFrameSize(newSize)
             contentSize = newSize
+            updateContentScale()
             updateSurfaceSize(newSize)
         }
 
@@ -85,10 +86,10 @@ extension Ghostty {
 
         private func updateContentScale() {
             guard let surface else { return }
-            let fbFrame = convertToBacking(frame)
-            let xScale = frame.size.width > 0 ? fbFrame.size.width / frame.size.width : 1
-            let yScale = frame.size.height > 0 ? fbFrame.size.height / frame.size.height : 1
-            ghostty_surface_set_content_scale(surface, xScale, yScale)
+            // ディスプレイの DPI は backingScaleFactor が権威。frame 比から求めると
+            // 未レイアウト時 (frame=0) に 1 へ転んでしまい、Retina で文字が極小になる。
+            let scale = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2.0
+            ghostty_surface_set_content_scale(surface, scale, scale)
         }
 
         private func updateSurfaceSize(_ size: CGSize) {
