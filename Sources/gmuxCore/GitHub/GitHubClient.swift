@@ -52,45 +52,71 @@ public actor GitHubClient {
         return try decode(GitHub.PullRequest.self, from: data)
     }
 
-    /// リポジトリの PR 一覧を取得 (open + 直近 closed/merged も含めるため state=all)。
-    public func listPullRequests(owner: String, repo: String, limit: Int = 30) async throws -> [GitHub.PullRequest] {
-        let data = try await runner.run(arguments: [
-            "pr", "list", "--repo", "\(owner)/\(repo)",
-            "--state", "all", "--limit", String(limit),
-            "--json", Self.prFields,
-        ])
-        return try decode([GitHub.PullRequest].self, from: data)
-    }
-
-    /// Issue 番号を参照する PR を探す。
-    /// claude が作成した PR は本文/タイトルに "#<n>" や "closes #<n>" を含む規約を前提とする。
-    /// 複数該当時は PR 番号が最大 (最新) のものを返す。
+    /// Issue に紐づく PR を探す。
+    /// GitHub 自身が認識する linked PR (GraphQL closedByPullRequestsReferences) のみを使う。
+    /// "Closes #N" 等の linkage を GitHub の判定で拾うので確実。
     public func findPullRequest(
         forIssueNumber issueNumber: Int,
         owner: String,
         repo: String
     ) async throws -> GitHub.PullRequest? {
-        let prs = try await listPullRequests(owner: owner, repo: repo)
-        let matches = prs.filter { Self.references(issueNumber: issueNumber, in: $0) }
-        return matches.max(by: { $0.number < $1.number })
+        guard let url = try await linkedPullRequestURL(owner: owner, repo: repo, issueNumber: issueNumber) else {
+            return nil
+        }
+        return try await fetchPullRequest(url: url)
     }
 
-    /// PR が指定 Issue 番号を参照しているか (本文・タイトルの "#<n>" を語境界付きで判定)。
-    static func references(issueNumber: Int, in pr: GitHub.PullRequest) -> Bool {
-        let haystacks = [pr.title, pr.body ?? ""]
-        let needle = "#\(issueNumber)"
-        for text in haystacks {
-            var searchStart = text.startIndex
-            while let range = text.range(of: needle, range: searchStart..<text.endIndex) {
-                // 直後が数字でない (= #42 が #421 の一部でない) ことを確認。
-                let after = range.upperBound
-                if after == text.endIndex || !(text[after].isNumber) {
-                    return true
-                }
-                searchStart = after
-            }
+    /// この Issue に GitHub 上で紐づいている PR の URL を返す。
+    ///
+    /// `timelineItems` の cross-reference / connected イベントを使う。これにより
+    /// - closing keyword (`Closes #N`) で閉じる PR
+    /// - 単に Issue を言及 (cross-reference) しただけの PR
+    /// - **別リポジトリ**の PR (例: Issue は notahotel/notahotel、PR は notahotel/notahotel-api)
+    /// のいずれも GitHub 自身の判定で拾える (テキスト一致ではない)。
+    ///
+    /// 複数あれば「最後に参照された OPEN/MERGED の PR」を優先して 1 件返す。
+    public func linkedPullRequestURL(owner: String, repo: String, issueNumber: Int) async throws -> URL? {
+        let query = """
+        query($owner:String!,$repo:String!,$num:Int!){\
+        repository(owner:$owner,name:$repo){issue(number:$num){\
+        timelineItems(first:100,itemTypes:[CROSS_REFERENCED_EVENT,CONNECTED_EVENT]){nodes{\
+        __typename \
+        ... on CrossReferencedEvent{source{__typename ... on PullRequest{url number state}}} \
+        ... on ConnectedEvent{subject{__typename ... on PullRequest{url number state}}}}}}}}
+        """
+        let data = try await runner.run(arguments: [
+            "api", "graphql",
+            "-f", "query=\(query)",
+            "-F", "owner=\(owner)",
+            "-F", "repo=\(repo)",
+            "-F", "num=\(issueNumber)",
+        ])
+        let resp = try decode(GraphQLLinkedPRResponse.self, from: data)
+        let nodes = resp.data.repository?.issue?.timelineItems.nodes ?? []
+        // 各イベントから PR を取り出す (CrossReferenced=source / Connected=subject)。
+        let prs = nodes.compactMap { $0.source ?? $0.subject }.filter { $0.url != nil }
+        guard !prs.isEmpty else { return nil }
+        // timeline は古い順。最後に参照された PR を優先。CLOSED(未マージ)は後回し。
+        let active = prs.last(where: { ($0.state ?? "") != "CLOSED" })
+        return (active ?? prs.last)?.url
+    }
+
+    private struct GraphQLLinkedPRResponse: Decodable {
+        struct DataField: Decodable { let repository: Repo? }
+        struct Repo: Decodable { let issue: Issue? }
+        struct Issue: Decodable { let timelineItems: Connection }
+        struct Connection: Decodable { let nodes: [Node] }
+        struct Node: Decodable {
+            let source: PRRef?   // CrossReferencedEvent
+            let subject: PRRef?  // ConnectedEvent
         }
-        return false
+        /// source/subject は PR 以外 (Issue 等) のこともあるので url は optional。
+        struct PRRef: Decodable {
+            let url: URL?
+            let number: Int?
+            let state: String?
+        }
+        let data: DataField
     }
 
     /// PR 取得で要求する共通フィールド。

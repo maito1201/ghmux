@@ -5,6 +5,34 @@ import Testing
 @Suite("GitHub.Models")
 struct GitHubModelsTests {
 
+    // MARK: - 寛容デコード (実データ回帰)
+
+    /// gh は未完了チェックで conclusion に空文字 "" を返す。以前これで dataCorrupted になった。
+    @Test func decodesEmptyConclusionAndUnknownStatus() throws {
+        let json = """
+        {
+          "number": 1, "title": "t", "url": "https://github.com/a/b/pull/1",
+          "state": "OPEN", "isDraft": false, "headRefName": "f", "baseRefName": "main",
+          "mergeable": "MERGEABLE",
+          "statusCheckRollup": [
+            {"name":"build","workflowName":"CI","status":"IN_PROGRESS","conclusion":"","detailsUrl":"https://x/1"},
+            {"name":"lint","workflowName":"CI","status":"COMPLETED","conclusion":"SUCCESS","detailsUrl":""},
+            {"name":"odd","workflowName":"CI","status":"WEIRD_STATUS","conclusion":"SKIPPED","detailsUrl":null}
+          ]
+        }
+        """
+        let pr = try JSONDecoder().decode(GitHub.PullRequest.self, from: Data(json.utf8))
+        let checks = pr.statusCheckRollup ?? []
+        #expect(checks.count == 3)
+        // 空 conclusion は nil、未知 status は .unknown、空 URL は nil に倒れる。
+        #expect(checks[0].conclusion == nil)
+        #expect(checks[0].status == .inProgress)
+        #expect(checks[1].detailsUrl == nil)
+        #expect(checks[2].status == .unknown)
+        // IN_PROGRESS が残るので pending。
+        #expect(GitHub.CIStatus.roll(checks) == .pending)
+    }
+
     // MARK: - Decoding
 
     @Test func decodeIssueFixture() throws {

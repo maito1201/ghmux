@@ -67,6 +67,11 @@ public enum GitHub {
             case queued    = "QUEUED"
             case inProgress = "IN_PROGRESS"
             case completed = "COMPLETED"
+            case waiting   = "WAITING"
+            case pending   = "PENDING"
+            case requested = "REQUESTED"
+            /// gh が想定外/空の値を返したときのフォールバック (= 完了扱いしない)。
+            case unknown   = "UNKNOWN"
         }
 
         public enum Conclusion: String, Codable, Sendable {
@@ -78,6 +83,43 @@ public enum GitHub {
             case timedOut = "TIMED_OUT"
             case actionRequired = "ACTION_REQUIRED"
             case stale    = "STALE"
+            case startupFailure = "STARTUP_FAILURE"
+        }
+
+        public init(
+            name: String,
+            workflowName: String?,
+            status: Status,
+            conclusion: Conclusion?,
+            detailsUrl: URL?
+        ) {
+            self.name = name
+            self.workflowName = workflowName
+            self.status = status
+            self.conclusion = conclusion
+            self.detailsUrl = detailsUrl
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case name, workflowName, status, conclusion, detailsUrl
+        }
+
+        /// 寛容なデコード。gh は未完了チェックで conclusion に空文字 "" を返すことがあり、
+        /// `decodeIfPresent` では nil にならず enum デコードに失敗する (dataCorrupted) ため、
+        /// 文字列として読んでから enum へ写像する。未知/空の値は安全側に倒す。
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            name = (try? c.decode(String.self, forKey: .name)) ?? ""
+            workflowName = (try? c.decodeIfPresent(String.self, forKey: .workflowName)) ?? nil
+
+            let statusRaw = ((try? c.decodeIfPresent(String.self, forKey: .status)) ?? nil) ?? ""
+            status = Status(rawValue: statusRaw) ?? .unknown
+
+            let concRaw = ((try? c.decodeIfPresent(String.self, forKey: .conclusion)) ?? nil) ?? ""
+            conclusion = concRaw.isEmpty ? nil : Conclusion(rawValue: concRaw)
+
+            // 空文字 URL 等で失敗しても nil に倒す。
+            detailsUrl = (try? c.decodeIfPresent(URL.self, forKey: .detailsUrl)) ?? nil
         }
     }
 

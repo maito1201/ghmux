@@ -1,5 +1,8 @@
 import AppKit
 import Ghostty
+import os
+
+private let log = Logger(subsystem: "com.gmux.core", category: "pane")
 
 /// 1 ペイン = ヘッダ(Issue / PR) + ターミナル領域 (libghostty Surface)。
 ///
@@ -82,6 +85,7 @@ final class PaneViewController: NSViewController {
                 session.start(issue: issue, promptTemplate: config.initialPrompt)
 
                 // Issue を参照する PR が現れるのを待つ。
+                header.showPRSearching()
                 startPRDiscovery(owner: parsed.owner, repo: parsed.repo, issueNumber: parsed.number)
             } catch {
                 header.showIssueError("Issue 取得に失敗: \(error)")
@@ -96,19 +100,32 @@ final class PaneViewController: NSViewController {
         prDiscoveryTask = Task { [weak self] in
             guard let self else { return }
             while !Task.isCancelled {
-                if let pr = try? await self.client.findPullRequest(
-                    forIssueNumber: issueNumber, owner: owner, repo: repo
-                ) {
-                    await MainActor.run {
-                        self.header.showPR(number: pr.number, url: pr.url.absoluteString)
-                        self.header.showCIStatus(GitHub.CIStatus.roll(pr.statusCheckRollup ?? []))
-                        self.startWatching(prURL: pr.url)
+                do {
+                    if let pr = try await self.client.findPullRequest(
+                        forIssueNumber: issueNumber, owner: owner, repo: repo
+                    ) {
+                        await MainActor.run {
+                            self.header.showPR(number: pr.number, url: pr.url.absoluteString)
+                            self.header.showCIStatus(GitHub.CIStatus.roll(pr.statusCheckRollup ?? []))
+                            self.startWatching(prURL: pr.url)
+                        }
+                        return // 発見したら探索終了、監視へ移行
                     }
-                    return // 発見したら探索終了、監視へ移行
+                    // 見つからない (= まだ PR 未作成)。探索中表示のまま次のポーリングへ。
+                } catch {
+                    // gh 失敗などはユーザーに見せる (無言ループにしない)。
+                    log.error("PR discovery failed: \(String(describing: error))")
+                    await MainActor.run { self.header.showPRError(self.shortError(error)) }
                 }
                 try? await Task.sleep(nanoseconds: self.pollInterval * 1_000_000_000)
             }
         }
+    }
+
+    /// エラーを 1 行に短縮する (ヘッダ表示用)。
+    private func shortError(_ error: Error) -> String {
+        let s = String(describing: error)
+        return s.count > 80 ? String(s.prefix(80)) + "…" : s
     }
 
     private func startWatching(prURL: URL) {
@@ -129,12 +146,33 @@ final class PaneViewController: NSViewController {
         }
     }
 
+    /// 同種の自動プロンプトを連続送信しないためのクールダウン (秒)。
+    /// 例: CI が pending↔failure を往復しても、claude が対処中の間は再送しない。
+    private let autoPromptCooldown: TimeInterval = 180
+    private var lastAutoPromptAt: [String: Date] = [:]
+
     /// PR の状態変化イベントを自動プロンプトに変換して claude へ送る。
     private func handleEvents(_ events: [PullRequestWatcher.Event], prURL: URL) {
         for event in events {
-            if let prompt = autoPromptRules.prompt(for: event, prURL: prURL) {
-                session?.send(prompt: prompt)
+            guard let prompt = autoPromptRules.prompt(for: event, prURL: prURL) else { continue }
+            let key = Self.eventKey(event)
+            let now = Date()
+            if let last = lastAutoPromptAt[key], now.timeIntervalSince(last) < autoPromptCooldown {
+                log.info("auto-prompt suppressed (cooldown): \(key)")
+                continue
             }
+            lastAutoPromptAt[key] = now
+            session?.send(prompt: prompt)
+        }
+    }
+
+    /// イベントの種類キー (クールダウン判定用)。同じ種類は一定時間再送しない。
+    private static func eventKey(_ event: PullRequestWatcher.Event) -> String {
+        switch event {
+        case .ciStateChanged: return "ci"
+        case .mergeableChanged: return "mergeable"
+        case .reviewAdded: return "review"
+        case .stateChanged: return "state"
         }
     }
 }

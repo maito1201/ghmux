@@ -105,6 +105,18 @@ final class PaneHeaderView: NSView, NSTextFieldDelegate {
         prLabel.toolTip = url
     }
 
+    /// PR を探索中であることを示す。
+    func showPRSearching() {
+        prLabel.stringValue = "PR を探索中…"
+        prLabel.toolTip = nil
+    }
+
+    /// PR 探索のエラーを示す (gh 失敗など)。
+    func showPRError(_ message: String) {
+        prLabel.stringValue = "PR 探索エラー: \(message)"
+        prLabel.toolTip = message
+    }
+
     /// CI 状態をアイコンで表す。
     func showCIStatus(_ status: GitHub.CIStatus) {
         switch status {

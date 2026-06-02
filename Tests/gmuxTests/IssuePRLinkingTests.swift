@@ -2,17 +2,19 @@ import Foundation
 import Testing
 @testable import gmuxCore
 
-@Suite("Issue ↔ PR linking")
+@Suite("Issue ↔ PR linking (GraphQL)")
 struct IssuePRLinkingTests {
 
-    final class FixtureRunner: GitHubClient.Runner, @unchecked Sendable {
-        let data: Data
-        private(set) var lastArgs: [String] = []
-        let lock = NSLock()
-        init(_ data: Data) { self.data = data }
+    /// 呼び出しごとにキュー先頭の Data を返す Runner。
+    final class SequencedRunner: GitHubClient.Runner, @unchecked Sendable {
+        private let lock = NSLock()
+        private var queue: [Data]
+        private(set) var allArgs: [[String]] = []
+        init(_ queue: [Data]) { self.queue = queue }
         func run(arguments: [String]) async throws -> Data {
-            lock.lock(); lastArgs = arguments; lock.unlock()
-            return data
+            lock.lock(); defer { lock.unlock() }
+            allArgs.append(arguments)
+            return queue.isEmpty ? Data("{}".utf8) : queue.removeFirst()
         }
     }
 
@@ -21,6 +23,16 @@ struct IssuePRLinkingTests {
             struct E: Error { let n: String }; throw E(n: name)
         }
         return try Data(contentsOf: url)
+    }
+
+    /// timelineItems の CrossReferencedEvent 形状を組み立てる。
+    /// `prs` は (number, state) のリスト。リポジトリは acme/widgets 既定。
+    private func graphql(prs: [(Int, String)], repo: String = "acme/widgets") -> Data {
+        let nodes = prs.map { (num, state) in
+            "{\"__typename\":\"CrossReferencedEvent\",\"source\":{\"__typename\":\"PullRequest\",\"url\":\"https://github.com/\(repo)/pull/\(num)\",\"number\":\(num),\"state\":\"\(state)\"}}"
+        }.joined(separator: ",")
+        let json = "{\"data\":{\"repository\":{\"issue\":{\"timelineItems\":{\"nodes\":[\(nodes)]}}}}}"
+        return Data(json.utf8)
     }
 
     // MARK: - URL parsing
@@ -38,33 +50,58 @@ struct IssuePRLinkingTests {
         }
     }
 
-    // MARK: - reference matching (word boundary)
+    // MARK: - linkedPullRequestURL (GraphQL)
 
-    @Test func referencesExactIssueNumber() throws {
-        let prs = try JSONDecoder().decode([GitHub.PullRequest].self, from: fixtureData("pr-list"))
-        let pr99 = prs.first { $0.number == 99 }!
-        let pr87 = prs.first { $0.number == 87 }!
-        #expect(GitHubClient.references(issueNumber: 42, in: pr99))   // "Closes #42"
-        #expect(!GitHubClient.references(issueNumber: 42, in: pr87))  // "#421" は #42 にマッチしない
-        #expect(GitHubClient.references(issueNumber: 421, in: pr87))
+    @Test func linkedURLPicksLastActive() async throws {
+        // timeline 順で最後に参照された OPEN/MERGED を採用 (= 30)。
+        let runner = SequencedRunner([graphql(prs: [(12, "OPEN"), (99, "MERGED"), (30, "OPEN")])])
+        let client = GitHubClient(runner: runner)
+        let url = try await client.linkedPullRequestURL(owner: "acme", repo: "widgets", issueNumber: 42)
+        #expect(url?.absoluteString == "https://github.com/acme/widgets/pull/30")
+        #expect(runner.allArgs.first?.contains("graphql") == true)
     }
 
-    // MARK: - finder
+    @Test func linkedURLSkipsClosedUnmerged() async throws {
+        // 最後の参照が CLOSED(未マージ)なら、その前の OPEN を優先。
+        let runner = SequencedRunner([graphql(prs: [(50, "OPEN"), (51, "CLOSED")])])
+        let client = GitHubClient(runner: runner)
+        let url = try await client.linkedPullRequestURL(owner: "acme", repo: "widgets", issueNumber: 42)
+        #expect(url?.absoluteString == "https://github.com/acme/widgets/pull/50")
+    }
 
-    @Test func findPullRequestForIssue() async throws {
-        let runner = FixtureRunner(try fixtureData("pr-list"))
+    @Test func linkedURLAcceptsCrossRepoPR() async throws {
+        // Issue と別リポの PR も拾えること (notahotel ケース)。
+        let runner = SequencedRunner([graphql(prs: [(14740, "OPEN")], repo: "notahotel/notahotel-api")])
+        let client = GitHubClient(runner: runner)
+        let url = try await client.linkedPullRequestURL(owner: "notahotel", repo: "notahotel", issueNumber: 10398)
+        #expect(url?.absoluteString == "https://github.com/notahotel/notahotel-api/pull/14740")
+    }
+
+    @Test func linkedURLNilWhenNoNodes() async throws {
+        let runner = SequencedRunner([graphql(prs: [])])
+        let client = GitHubClient(runner: runner)
+        let url = try await client.linkedPullRequestURL(owner: "acme", repo: "widgets", issueNumber: 42)
+        #expect(url == nil)
+    }
+
+    // MARK: - findPullRequest (GraphQL → PR 詳細)
+
+    @Test func findPullRequestResolvesViaGraphQL() async throws {
+        // 1 回目: graphql で linked PR (#99)、2 回目: その PR の詳細 (pr-success)。
+        let runner = SequencedRunner([
+            graphql(prs: [(99, "OPEN")]),
+            try fixtureData("pr-success"),
+        ])
         let client = GitHubClient(runner: runner)
         let pr = try await client.findPullRequest(forIssueNumber: 42, owner: "acme", repo: "widgets")
         #expect(pr?.number == 99)
-        // gh pr list が正しい引数で呼ばれていること
-        #expect(runner.lastArgs.contains("list"))
-        #expect(runner.lastArgs.contains("acme/widgets"))
+        #expect(pr?.mergeable == .mergeable)
     }
 
-    @Test func findPullRequestReturnsNilWhenNoMatch() async throws {
-        let runner = FixtureRunner(try fixtureData("pr-list"))
+    @Test func findPullRequestNilWhenNoLinkedPR() async throws {
+        let runner = SequencedRunner([graphql(prs: [])])
         let client = GitHubClient(runner: runner)
-        let pr = try await client.findPullRequest(forIssueNumber: 999, owner: "acme", repo: "widgets")
+        let pr = try await client.findPullRequest(forIssueNumber: 42, owner: "acme", repo: "widgets")
         #expect(pr == nil)
     }
 }
