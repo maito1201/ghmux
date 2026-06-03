@@ -51,8 +51,8 @@ final class WorkspaceViewController: NSViewController {
 
     // MARK: - 生成
 
-    private func makePane() -> PaneViewController {
-        PaneViewController()
+    private func makePane(workingDirectory: String? = nil) -> PaneViewController {
+        PaneViewController(workingDirectory: workingDirectory)
     }
 
     // MARK: - ツリー走査
@@ -151,7 +151,8 @@ final class WorkspaceViewController: NSViewController {
 
     private func doSplit(_ direction: BinarySplitView.Direction) {
         guard let active = activePane(), let node = findLeaf(active) else { return }
-        let newPane = makePane()
+        // アクティブペインの作業ディレクトリを引き継いで新ペインを作る (cmux/ghostty と同挙動)。
+        let newPane = makePane(workingDirectory: active.currentDirectory())
         // 対象の葉ノードをその場で「節」に変える (親ポインタを書き換えずに済む)。
         node.pane = nil
         node.direction = direction

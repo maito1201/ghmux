@@ -87,6 +87,11 @@ public enum Ghostty {
             guard let surfaceView else { return }
             surfaceView.window?.makeFirstResponder(surfaceView)
         }
+
+        /// 端末の現在の作業ディレクトリ (取得不可なら nil)。
+        public func currentDirectory() -> String? {
+            surfaceView?.currentDirectory()
+        }
     }
 }
 

@@ -1,5 +1,6 @@
 import AppKit
 import CGhostty
+import Darwin
 
 extension Ghostty {
     /// libghostty surface をホストする AppKit ビュー。
@@ -121,6 +122,29 @@ extension Ghostty {
             guard let surface else { return }
             text.withCString { ptr in
                 ghostty_surface_text(surface, ptr, UInt(strlen(ptr)))
+            }
+        }
+
+        /// 端末で動いているフォアグラウンドプロセスの作業ディレクトリ。
+        /// シェル統合 (OSC 7) に依存せず、PID から直接取得するので確実。
+        /// 取得できなければ nil。
+        func currentDirectory() -> String? {
+            guard let surface else { return nil }
+            let pid = ghostty_surface_foreground_pid(surface)
+            guard pid > 0 else { return nil }
+            return Self.workingDirectory(ofPID: pid_t(truncatingIfNeeded: pid))
+        }
+
+        /// 指定 PID の現在の作業ディレクトリを proc_pidinfo で取得する。
+        private static func workingDirectory(ofPID pid: pid_t) -> String? {
+            var info = proc_vnodepathinfo()
+            let size = Int32(MemoryLayout<proc_vnodepathinfo>.size)
+            let n = proc_pidinfo(pid, PROC_PIDVNODEPATHINFO, 0, &info, size)
+            guard n == size else { return nil }
+            return withUnsafeBytes(of: &info.pvi_cdir.vip_path) { raw -> String? in
+                let path = raw.baseAddress!.assumingMemoryBound(to: CChar.self)
+                let s = String(cString: path)
+                return s.isEmpty ? nil : s
             }
         }
 

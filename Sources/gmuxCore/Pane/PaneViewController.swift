@@ -13,7 +13,16 @@ private let log = Logger(subsystem: "com.gmux.core", category: "pane")
 final class PaneViewController: NSViewController {
 
     private let header = PaneHeaderView()
-    private let terminalHost = TerminalHostView()
+    private let terminalHost: TerminalHostView
+
+    /// `workingDirectory` を渡すと端末をそのディレクトリで起動する (分割時の cwd 引き継ぎ)。
+    init(workingDirectory: String? = nil) {
+        self.terminalHost = TerminalHostView(workingDirectory: workingDirectory)
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("Use init(workingDirectory:)") }
 
     private let client = GitHubClient()
     /// ユーザー設定 (~/.config/gmux/config.toml)。
@@ -61,6 +70,11 @@ final class PaneViewController: NSViewController {
     /// 端末をキーボードフォーカスにする (分割直後・フォーカス移動時に呼ぶ)。
     func focusTerminal() {
         terminalHost.focusTerminal()
+    }
+
+    /// 端末の現在の作業ディレクトリ (分割時に新ペインへ引き継ぐ)。
+    func currentDirectory() -> String? {
+        terminalHost.currentDirectory()
     }
 
     // MARK: - Issue 投入
