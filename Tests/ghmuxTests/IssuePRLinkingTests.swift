@@ -26,10 +26,20 @@ struct IssuePRLinkingTests {
     }
 
     /// timelineItems の CrossReferencedEvent 形状を組み立てる。
-    /// `prs` は (number, state) のリスト。リポジトリは acme/widgets 既定。
+    /// `prs` は (number, state) のリスト。createdAt は timeline 順 (配列順) に増加させる。
+    /// リポジトリは acme/widgets 既定。
     private func graphql(prs: [(Int, String)], repo: String = "acme/widgets") -> Data {
-        let nodes = prs.map { (num, state) in
-            "{\"__typename\":\"CrossReferencedEvent\",\"source\":{\"__typename\":\"PullRequest\",\"url\":\"https://github.com/\(repo)/pull/\(num)\",\"number\":\(num),\"state\":\"\(state)\"}}"
+        let dated = prs.enumerated().map { (i, pr) in
+            (pr.0, pr.1, "2024-01-01T00:\(String(format: "%02d", i)):00Z")
+        }
+        return graphqlDated(prs: dated, repo: repo)
+    }
+
+    /// createdAt を明示する版 (作成日時と timeline 順が食い違うケースの検証用)。
+    /// `prs` は (number, state, createdAt[ISO8601]) のリスト。
+    private func graphqlDated(prs: [(Int, String, String)], repo: String = "acme/widgets") -> Data {
+        let nodes = prs.map { (num, state, createdAt) in
+            "{\"__typename\":\"CrossReferencedEvent\",\"source\":{\"__typename\":\"PullRequest\",\"url\":\"https://github.com/\(repo)/pull/\(num)\",\"number\":\(num),\"state\":\"\(state)\",\"createdAt\":\"\(createdAt)\"}}"
         }.joined(separator: ",")
         let json = "{\"data\":{\"repository\":{\"issue\":{\"timelineItems\":{\"nodes\":[\(nodes)]}}}}}"
         return Data(json.utf8)
@@ -52,8 +62,8 @@ struct IssuePRLinkingTests {
 
     // MARK: - linkedPullRequestURL (GraphQL)
 
-    @Test func linkedURLPicksLastActive() async throws {
-        // timeline 順で最後に参照された OPEN/MERGED を採用 (= 30)。
+    @Test func linkedURLPicksNewestActive() async throws {
+        // createdAt が最新の OPEN/MERGED を採用 (= 30)。
         let runner = SequencedRunner([graphql(prs: [(12, "OPEN"), (99, "MERGED"), (30, "OPEN")])])
         let client = GitHubClient(runner: runner)
         let url = try await client.linkedPullRequestURL(owner: "acme", repo: "widgets", issueNumber: 42)
@@ -61,8 +71,20 @@ struct IssuePRLinkingTests {
         #expect(runner.allArgs.first?.contains("graphql") == true)
     }
 
+    @Test func linkedURLPicksNewestNotLastReferenced() async throws {
+        // バグ再現: 古い PR (#12) が timeline 末尾に再参照されても、
+        // createdAt が新しい #30 を採用する (参照順ではなく作成日時で選ぶ)。
+        let runner = SequencedRunner([graphqlDated(prs: [
+            (30, "OPEN", "2024-02-01T00:00:00Z"),
+            (12, "OPEN", "2024-01-01T00:00:00Z"),
+        ])])
+        let client = GitHubClient(runner: runner)
+        let url = try await client.linkedPullRequestURL(owner: "acme", repo: "widgets", issueNumber: 42)
+        #expect(url?.absoluteString == "https://github.com/acme/widgets/pull/30")
+    }
+
     @Test func linkedURLSkipsClosedUnmerged() async throws {
-        // 最後の参照が CLOSED(未マージ)なら、その前の OPEN を優先。
+        // CLOSED(未マージ)は後回し。OPEN を優先。
         let runner = SequencedRunner([graphql(prs: [(50, "OPEN"), (51, "CLOSED")])])
         let client = GitHubClient(runner: runner)
         let url = try await client.linkedPullRequestURL(owner: "acme", repo: "widgets", issueNumber: 42)

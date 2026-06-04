@@ -74,15 +74,15 @@ public actor GitHubClient {
     /// - **別リポジトリ**の PR (例: Issue は notahotel/notahotel、PR は notahotel/notahotel-api)
     /// のいずれも GitHub 自身の判定で拾える (テキスト一致ではない)。
     ///
-    /// 複数あれば「最後に参照された OPEN/MERGED の PR」を優先して 1 件返す。
+    /// 複数あれば「最後に作成された (最新の) OPEN/MERGED の PR」を優先して 1 件返す。
     public func linkedPullRequestURL(owner: String, repo: String, issueNumber: Int) async throws -> URL? {
         let query = """
         query($owner:String!,$repo:String!,$num:Int!){\
         repository(owner:$owner,name:$repo){issue(number:$num){\
         timelineItems(first:100,itemTypes:[CROSS_REFERENCED_EVENT,CONNECTED_EVENT]){nodes{\
         __typename \
-        ... on CrossReferencedEvent{source{__typename ... on PullRequest{url number state}}} \
-        ... on ConnectedEvent{subject{__typename ... on PullRequest{url number state}}}}}}}}
+        ... on CrossReferencedEvent{source{__typename ... on PullRequest{url number state createdAt}}} \
+        ... on ConnectedEvent{subject{__typename ... on PullRequest{url number state createdAt}}}}}}}}
         """
         let data = try await runner.run(arguments: [
             "api", "graphql",
@@ -96,9 +96,14 @@ public actor GitHubClient {
         // 各イベントから PR を取り出す (CrossReferenced=source / Connected=subject)。
         let prs = nodes.compactMap { $0.source ?? $0.subject }.filter { $0.url != nil }
         guard !prs.isEmpty else { return nil }
-        // timeline は古い順。最後に参照された PR を優先。CLOSED(未マージ)は後回し。
-        let active = prs.last(where: { ($0.state ?? "") != "CLOSED" })
-        return (active ?? prs.last)?.url
+        // 1 Issue に複数 PR が紐づく場合、最新 (createdAt 最大) を採用する。
+        // 古い PR が後から再参照されると timeline 末尾に来てしまうため、参照順 (.last) ではなく
+        // 作成日時で選ぶ。OPEN/MERGED を CLOSED(未マージ)より優先する。
+        func newest(_ list: [GraphQLLinkedPRResponse.PRRef]) -> GraphQLLinkedPRResponse.PRRef? {
+            list.max { ($0.createdAt ?? .distantPast) < ($1.createdAt ?? .distantPast) }
+        }
+        let active = newest(prs.filter { ($0.state ?? "") != "CLOSED" })
+        return (active ?? newest(prs))?.url
     }
 
     private struct GraphQLLinkedPRResponse: Decodable {
@@ -115,6 +120,7 @@ public actor GitHubClient {
             let url: URL?
             let number: Int?
             let state: String?
+            let createdAt: Date?
         }
         let data: DataField
     }
