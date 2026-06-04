@@ -9,32 +9,32 @@ import PackageDescription
 //   - Ghostty    (Swift target)  … Ghostty.Surface 等の Swift ラッパー。import CGhostty。
 
 let package = Package(
-    name: "gmux",
+    name: "ghmux",
     platforms: [
         .macOS(.v13),
     ],
     products: [
-        .executable(name: "gmux", targets: ["gmux"]),
-        .library(name: "gmuxCore", targets: ["gmuxCore"]),
+        .executable(name: "ghmux", targets: ["ghmux"]),
+        .library(name: "ghmuxCore", targets: ["ghmuxCore"]),
         .library(name: "Ghostty", targets: ["Ghostty"]),
     ],
     dependencies: [
-        // TOML 設定ファイル (~/.config/gmux/config.toml) の読み書き。
+        // TOML 設定ファイル (~/.config/ghmux/config.toml) の読み書き。
         .package(url: "https://github.com/LebJe/TOMLKit.git", from: "0.6.0"),
     ],
     targets: [
         .executableTarget(
-            name: "gmux",
-            dependencies: ["gmuxCore"],
-            path: "Sources/gmux"
+            name: "ghmux",
+            dependencies: ["ghmuxCore"],
+            path: "Sources/ghmux"
         ),
         .target(
-            name: "gmuxCore",
+            name: "ghmuxCore",
             dependencies: [
                 "Ghostty",
                 .product(name: "TOMLKit", package: "TOMLKit"),
             ],
-            path: "Sources/gmuxCore"
+            path: "Sources/ghmuxCore"
         ),
         .target(
             name: "Ghostty",
@@ -70,9 +70,9 @@ let package = Package(
             path: "Vendored/GhosttyKit.xcframework"
         ),
         .testTarget(
-            name: "gmuxTests",
-            dependencies: ["gmuxCore", "Ghostty"],
-            path: "Tests/gmuxTests",
+            name: "ghmuxTests",
+            dependencies: ["ghmuxCore", "Ghostty"],
+            path: "Tests/ghmuxTests",
             resources: [
                 .copy("Fixtures"),
             ]

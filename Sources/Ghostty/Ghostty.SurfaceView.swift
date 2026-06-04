@@ -7,7 +7,7 @@ extension Ghostty {
     /// window へ接続したタイミングで `ghostty_surface_new` を呼び、Metal 描画と PTY を起動する。
     ///
     /// reference: vendor/ghostty/macos/Sources/Ghostty/Surface View/SurfaceView_AppKit.swift
-    /// gmux では MVP に必要な範囲 (描画 / キー入力 / マウス / リサイズ / フォーカス) に絞る。
+    /// ghmux では MVP に必要な範囲 (描画 / キー入力 / マウス / リサイズ / フォーカス) に絞る。
     public final class SurfaceView: NSView, NSTextInputClient {
         private let configuration: Surface.Configuration
         private(set) var surface: ghostty_surface_t?
@@ -118,11 +118,34 @@ extension Ghostty {
         // MARK: - 公開 API
 
         /// PTY にテキストを直接送る (ClaudeSession のプロンプト投入用)。
+        ///
+        /// libghostty 側ではこれは「ペースト」として扱われる。シェルが bracketed paste mode を
+        /// 有効にしていると、末尾の改行はペースト内容の一部 (`\x1b[200~ … \x1b[201~`) になり
+        /// **コマンド実行のトリガーにならない**。実行確定には `sendReturn()` で Enter キーを別途送る。
         func sendText(_ text: String) {
             guard let surface else { return }
             text.withCString { ptr in
                 ghostty_surface_text(surface, ptr, UInt(strlen(ptr)))
             }
+        }
+
+        /// Enter (Return) キーを 1 回押下したことを PTY に通知する。
+        ///
+        /// `sendText` のペースト経由では bracketed paste mode 下でコマンドが確定しないため、
+        /// プロンプト投入後の実行確定にはキー入力として Enter を送る必要がある。
+        /// keycode は macOS の virtual keycode をそのまま渡す (libghostty が native→physical へ
+        /// 変換する。kVK_Return = 36 → `.enter`)。
+        func sendReturn() {
+            guard let surface else { return }
+            var key_ev = ghostty_input_key_s()
+            key_ev.action = GHOSTTY_ACTION_PRESS
+            key_ev.keycode = 36 // kVK_Return
+            key_ev.mods = GHOSTTY_MODS_NONE
+            key_ev.consumed_mods = GHOSTTY_MODS_NONE
+            key_ev.text = nil // 制御文字は ghostty 側でエンコードするため text には載せない。
+            key_ev.unshifted_codepoint = 0
+            key_ev.composing = false
+            _ = ghostty_surface_key(surface, key_ev)
         }
 
         /// 端末で動いているフォアグラウンドプロセスの作業ディレクトリ。

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# bootstrap.sh — gmux の依存をローカルマシンに揃える。
+# bootstrap.sh — ghmux の依存をローカルマシンに揃える。
 # 初回 clone 後とプル後に実行する想定。
 set -euo pipefail
 
@@ -32,4 +32,4 @@ step "Swift Package のビルド"
 swift build
 
 step "完了"
-echo "  swift run gmux  で起動できます。"
+echo "  swift run ghmux  で起動できます。"

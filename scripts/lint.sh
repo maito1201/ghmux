@@ -12,6 +12,6 @@ if ! command -v swift-format >/dev/null 2>&1; then
 fi
 
 swift-format lint --recursive --strict \
-    Sources/gmux \
+    Sources/ghmux \
     Sources/GhosttyKit \
-    Tests/gmuxTests
+    Tests/ghmuxTests

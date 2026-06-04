@@ -1,3 +1,0 @@
-import gmuxCore
-
-runApp()

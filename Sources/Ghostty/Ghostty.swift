@@ -77,9 +77,14 @@ public enum Ghostty {
             return view
         }
 
-        /// PTY にテキストを送る (改行は呼び出し側で付与)。
+        /// PTY にテキストを送る (ペースト扱い。実行確定は `sendReturn()` で行う)。
         public func send(_ text: String) {
             surfaceView?.sendText(text)
+        }
+
+        /// Enter (Return) キー押下を PTY に送る。ペースト投入したコマンドの実行確定に使う。
+        public func sendReturn() {
+            surfaceView?.sendReturn()
         }
 
         /// この surface をキーボードフォーカスにする。

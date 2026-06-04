@@ -3,7 +3,7 @@ import CGhostty
 
 // NSEvent / modifier を libghostty の入力構造体に変換するための最小ユーティリティ。
 // reference: vendor/ghostty/macos/Sources/Ghostty/{Ghostty.Input.swift, NSEvent+Extension.swift}
-// gmux では IME のフル機能ではなく、ASCII + 一般的な合成入力が動く範囲に簡略化している。
+// ghmux では IME のフル機能ではなく、ASCII + 一般的な合成入力が動く範囲に簡略化している。
 
 extension Ghostty {
     /// AppKit の modifier flag を libghostty の mods bitmask に変換する。

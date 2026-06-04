@@ -12,7 +12,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TARGET="$ROOT/vendor/zig/0.15.2/lib/std/zig/system/darwin/macos.zig"
-MARKER="gmux patch: Zig 0.15.2 doesn't know"
+MARKER="ghmux patch: Zig 0.15.2 doesn't know"
 
 [ -f "$TARGET" ] || { echo "✗ $TARGET が無い。scripts/install-zig.sh を先に実行してください" >&2; exit 1; }
 
@@ -40,7 +40,7 @@ old = """            if (parseSystemVersion(bytes)) |ver| {
             } else |_| {"""
 
 new = """            if (parseSystemVersion(bytes)) |parsed_ver| {
-                // gmux patch: Zig 0.15.2 doesn't know how to link against macOS 26+
+                // ghmux patch: Zig 0.15.2 doesn't know how to link against macOS 26+
                 // host (released after Zig 0.15.2). Clamp to 15.5 so the linker
                 // uses the well-known macOS 15 ABI conventions. Remove this when
                 // we move to a Zig version that natively understands macOS 26.

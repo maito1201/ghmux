@@ -3,7 +3,7 @@ import CGhostty
 import os
 
 extension Ghostty {
-    static let logger = Logger(subsystem: "com.gmux.Ghostty", category: "ghostty")
+    static let logger = Logger(subsystem: "com.ghmux.Ghostty", category: "ghostty")
 
     /// プロセス全体で 1 つだけ存在する libghostty アプリ。
     /// 全ペインの `SurfaceView` がこの `app` を共有して surface を生成する。

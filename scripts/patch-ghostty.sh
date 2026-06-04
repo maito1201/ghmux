@@ -12,7 +12,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TARGET="$ROOT/vendor/ghostty/src/build/GhosttyXCFramework.zig"
-MARKER="gmux patch: with -Dxcframework-target=native"
+MARKER="ghmux patch: with -Dxcframework-target=native"
 
 [ -f "$TARGET" ] || { echo "✗ $TARGET が無い。git submodule update --init を先に実行してください" >&2; exit 1; }
 
@@ -42,7 +42,7 @@ new = """pub fn init(
     deps: *const SharedDeps,
     target: Target,
 ) !GhosttyXCFramework {
-    // gmux patch: with -Dxcframework-target=native we skip iOS slice initialisation
+    // ghmux patch: with -Dxcframework-target=native we skip iOS slice initialisation
     // entirely. The original code unconditionally constructs the iOS targets which
     // forces the build to find an iOS SDK (Xcode.app) even when the caller only wants
     // a macOS-only xcframework. Skipping it means we can build with Command Line Tools
