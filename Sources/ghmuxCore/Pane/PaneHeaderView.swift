@@ -61,8 +61,97 @@ final class LinkLabel: NSTextField {
     }
 }
 
+/// PR 1 件分の行 (クリック可能な PR リンク + 状態/CI バッジ)。
+/// 1 Issue : N PR を縦に積めるよう、ヘッダ内のスタックに並べて使う。
+final class PRStatusRow: NSView {
+
+    /// 状態バッジの最小幅。最長文字列 ("🚫 Closed" / "✅ Merged") が収まり、
+    /// 先頭の記号が常に同じ x 位置に来る幅。Issue バッジと共有して列を揃える。
+    static let badgeMinWidth: CGFloat = 80
+
+    /// バッジ用 NSTextField を共通スタイルで生成する (Issue / PR で見た目を揃える)。
+    static func makeBadge() -> NSTextField {
+        let badge = NSTextField(labelWithString: "")
+        badge.font = NSFont.systemFont(ofSize: 13)
+        badge.textColor = NSColor.tertiaryLabelColor
+        badge.alignment = .left
+        badge.translatesAutoresizingMaskIntoConstraints = false
+        return badge
+    }
+
+    private let link = LinkLabel(labelWithString: "")
+    private let badge = PRStatusRow.makeBadge()
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        link.font = NSFont.systemFont(ofSize: 11)
+        link.textColor = NSColor.secondaryLabelColor
+        link.lineBreakMode = .byTruncatingTail
+        // 長いリンク文字でもバッジを押し出さず省略させ、バッジの右寄せを優先する。
+        link.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        link.translatesAutoresizingMaskIntoConstraints = false
+
+        addSubview(link)
+        addSubview(badge)
+        NSLayoutConstraint.activate([
+            heightAnchor.constraint(equalToConstant: 18),
+            link.leadingAnchor.constraint(equalTo: leadingAnchor),
+            link.centerYAnchor.constraint(equalTo: centerYAnchor),
+
+            // バッジは行右端固定 + 最小幅で、状態文字列の長短によらず記号位置を揃える。
+            badge.centerYAnchor.constraint(equalTo: centerYAnchor),
+            badge.trailingAnchor.constraint(equalTo: trailingAnchor),
+            badge.leadingAnchor.constraint(greaterThanOrEqualTo: link.trailingAnchor, constant: 8),
+            badge.widthAnchor.constraint(greaterThanOrEqualToConstant: Self.badgeMinWidth),
+        ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("Use init(frame:)") }
+
+    /// PR をクリック可能なリンクとして表示する (番号のみ。状態はバッジへ集約)。
+    func showLink(number: Int, url: URL?) {
+        link.setLink("PR #\(number)", url: url)
+    }
+
+    /// 探索中/エラー等のメッセージを表示する (バッジは消す)。
+    func showMessage(_ text: String) {
+        link.setLink(text, url: nil)
+        badge.stringValue = ""
+        badge.toolTip = nil
+    }
+
+    /// PR 状態と CI を 1 つのバッジに統合して表示する。
+    /// マージ/クローズ済みなら CI は出さず、その状態だけを示す。open のときのみ CI を示す。
+    func showStatus(prState: GitHub.PullRequest.State, ci: GitHub.CIStatus) {
+        switch prState {
+        case .merged:
+            badge.stringValue = "🟣 Merged"
+            badge.toolTip = "Merged"
+        case .closed:
+            badge.stringValue = "🔴 Closed"
+            badge.toolTip = "Closed without merge"
+        case .open:
+            switch ci {
+            case .noChecks:
+                badge.stringValue = ""
+                badge.toolTip = nil
+            case .pending:
+                badge.stringValue = "🟡 CI"
+                badge.toolTip = "CI running"
+            case .success:
+                badge.stringValue = "✅ CI"
+                badge.toolTip = "CI passed"
+            case .failure(let jobs):
+                badge.stringValue = "❌ CI"
+                badge.toolTip = "CI failed: " + jobs.joined(separator: ", ")
+            }
+        }
+    }
+}
+
 /// CONCEPT.md の「Issue1 / PR1 CI Pass」相当のヘッダ表示。
-/// Issue URL 入力欄 + Issue タイトル + PR リンク + CI バッジ。
+/// Issue URL 入力欄 + Issue タイトル/状態 + (1 Issue : N の) PR リンク/状態行。
 final class PaneHeaderView: NSView, NSTextFieldDelegate {
 
     /// Issue URL が入力 (Return) されたときに呼ばれる。
@@ -75,9 +164,13 @@ final class PaneHeaderView: NSView, NSTextFieldDelegate {
 
     private let issueField = PasteableTextField()
     private let issueTitleLabel = LinkLabel(labelWithString: "")
-    private let issueBadge = NSTextField(labelWithString: "")
-    private let prLabel = LinkLabel(labelWithString: "PR: (none)")
-    private let ciBadge = NSTextField(labelWithString: "")
+    private let issueBadge = PRStatusRow.makeBadge()
+    /// PR 行を縦に積むスタック (1 Issue : N PR)。
+    private let prStack = NSStackView()
+    /// PR が 1 件も無いときに探索中/エラーを出す常設行。
+    private let placeholderRow = PRStatusRow()
+    /// PR URL → 行。GitHub 上の紐付け集合に追従して増減する。
+    private var prRows: [URL: PRStatusRow] = [:]
     private let splitRightButton = NSButton()
     private let splitDownButton = NSButton()
 
@@ -95,24 +188,19 @@ final class PaneHeaderView: NSView, NSTextFieldDelegate {
         issueTitleLabel.font = NSFont.systemFont(ofSize: 11, weight: .medium)
         issueTitleLabel.textColor = NSColor.labelColor
         issueTitleLabel.lineBreakMode = .byTruncatingTail
+        // 単一行に固定し、横幅が縮んでも折り返さず省略する (折り返すと PR 行が下へ押し出され見切れる)。
+        issueTitleLabel.usesSingleLineMode = true
+        issueTitleLabel.maximumNumberOfLines = 1
         // 長いタイトルはバッジを押し出さず省略させる (バッジの右寄せを優先)。
         issueTitleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         issueTitleLabel.translatesAutoresizingMaskIntoConstraints = false
 
-        prLabel.font = NSFont.systemFont(ofSize: 11)
-        prLabel.textColor = NSColor.secondaryLabelColor
-        prLabel.translatesAutoresizingMaskIntoConstraints = false
-
-        // バッジは最小幅 + 左揃えで、状態文字列の長短によらず先頭の記号位置を揃える。
-        ciBadge.font = NSFont.systemFont(ofSize: 13)
-        ciBadge.textColor = NSColor.tertiaryLabelColor
-        ciBadge.alignment = .left
-        ciBadge.translatesAutoresizingMaskIntoConstraints = false
-
-        issueBadge.font = NSFont.systemFont(ofSize: 13)
-        issueBadge.textColor = NSColor.tertiaryLabelColor
-        issueBadge.alignment = .left
-        issueBadge.translatesAutoresizingMaskIntoConstraints = false
+        // PR 行スタック。各行は幅をスタックに合わせて右端バッジ列を揃える (rowForPR で width 制約)。
+        prStack.orientation = .vertical
+        prStack.alignment = .leading
+        prStack.spacing = 2
+        prStack.translatesAutoresizingMaskIntoConstraints = false
+        prStack.addArrangedSubview(placeholderRow)
 
         configureSplitButton(splitRightButton, symbol: "square.split.2x1", tip: "Split Right",
                              action: #selector(didTapSplitRight))
@@ -122,14 +210,9 @@ final class PaneHeaderView: NSView, NSTextFieldDelegate {
         addSubview(issueField)
         addSubview(issueTitleLabel)
         addSubview(issueBadge)
-        addSubview(prLabel)
-        addSubview(ciBadge)
+        addSubview(prStack)
         addSubview(splitRightButton)
         addSubview(splitDownButton)
-
-        // 状態バッジの最小幅。最長文字列 ("🟣 Closed" / "✅ Merged") が収まり、
-        // 記号 (先頭) が常に同じ x 位置に来る幅。両バッジで共有して列を揃える。
-        let badgeMinWidth: CGFloat = 80
 
         NSLayoutConstraint.activate([
             issueField.topAnchor.constraint(equalTo: topAnchor, constant: 6),
@@ -155,16 +238,16 @@ final class PaneHeaderView: NSView, NSTextFieldDelegate {
             issueBadge.centerYAnchor.constraint(equalTo: issueTitleLabel.centerYAnchor),
             issueBadge.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
             issueBadge.leadingAnchor.constraint(greaterThanOrEqualTo: issueTitleLabel.trailingAnchor, constant: 8),
-            issueBadge.widthAnchor.constraint(greaterThanOrEqualToConstant: badgeMinWidth),
+            issueBadge.widthAnchor.constraint(greaterThanOrEqualToConstant: PRStatusRow.badgeMinWidth),
 
-            // PR 行 (PR リンク + 状態/CI バッジ)。
-            prLabel.topAnchor.constraint(equalTo: issueTitleLabel.bottomAnchor, constant: 2),
-            prLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
+            // PR 行スタック。bottom を自身の下端へ固定し、ヘッダ高さを内容に追従させる
+            // (固定高をやめることで PR 行が増えても見切れない)。
+            prStack.topAnchor.constraint(equalTo: issueTitleLabel.bottomAnchor, constant: 4),
+            prStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
+            prStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            prStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -8),
 
-            ciBadge.centerYAnchor.constraint(equalTo: prLabel.centerYAnchor),
-            ciBadge.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
-            ciBadge.leadingAnchor.constraint(greaterThanOrEqualTo: prLabel.trailingAnchor, constant: 8),
-            ciBadge.widthAnchor.constraint(greaterThanOrEqualToConstant: badgeMinWidth),
+            placeholderRow.widthAnchor.constraint(equalTo: prStack.widthAnchor),
         ])
     }
 
@@ -224,49 +307,68 @@ final class PaneHeaderView: NSView, NSTextFieldDelegate {
         }
     }
 
-    /// PR をクリック可能なリンクとして表示する (番号のみ。状態はステータスバッジへ集約)。
-    func showPR(number: Int, url: URL) {
-        prLabel.setLink("PR #\(number)", url: url)
-    }
+    // MARK: - PR 行 (1 Issue : N PR)
 
-    /// PR を探索中であることを示す。
+    /// PR を探索中であることを示す (PR 行が 1 件も無い状態)。
     func showPRSearching() {
-        prLabel.setLink("PR を探索中…", url: nil)
-        ciBadge.stringValue = ""
+        clearPRRows()
+        placeholderRow.isHidden = false
+        placeholderRow.showMessage("PR を探索中…")
     }
 
     /// PR 探索のエラーを示す (gh 失敗など)。
+    /// 既に PR 行があるなら、一過性の失敗で消さないようエラーは出さない。
     func showPRError(_ message: String) {
-        prLabel.setLink("PR 探索エラー: \(message)", url: nil)
-        ciBadge.stringValue = ""
+        guard prRows.isEmpty else { return }
+        placeholderRow.isHidden = false
+        placeholderRow.showMessage("PR 探索エラー: \(message)")
     }
 
-    /// PR 状態と CI を 1 つのステータスバッジに統合して表示する。
-    /// マージ/クローズ済みなら CI は出さず、その状態だけを示す。open のときのみ CI を示す。
-    func showStatus(prState: GitHub.PullRequest.State, ci: GitHub.CIStatus) {
-        switch prState {
-        case .merged:
-            ciBadge.stringValue = "✅ Merged"
-            ciBadge.toolTip = "Merged"
-        case .closed:
-            ciBadge.stringValue = "🚫 Closed"
-            ciBadge.toolTip = "Closed without merge"
-        case .open:
-            switch ci {
-            case .noChecks:
-                ciBadge.stringValue = ""
-                ciBadge.toolTip = nil
-            case .pending:
-                ciBadge.stringValue = "🟡 CI"
-                ciBadge.toolTip = "CI running"
-            case .success:
-                ciBadge.stringValue = "✅ CI"
-                ciBadge.toolTip = "CI passed"
-            case .failure(let jobs):
-                ciBadge.stringValue = "❌ CI"
-                ciBadge.toolTip = "CI failed: " + jobs.joined(separator: ", ")
-            }
+    /// 指定 URL の PR 行を用意する (無ければ作る)。URL から番号を取り即時にリンク表示する。
+    /// 状態は後続の `updatePR` (watcher 由来) で埋まる。
+    func ensurePR(url: URL) {
+        let row = rowForPR(url)
+        if let number = try? GitHubClient.parsePRUrl(url).number {
+            row.showLink(number: number, url: url)
         }
+        placeholderRow.isHidden = true
+    }
+
+    /// PR の状態/CI をその行に反映する。
+    func updatePR(url: URL, number: Int, state: GitHub.PullRequest.State, ci: GitHub.CIStatus) {
+        let row = rowForPR(url)
+        row.showLink(number: number, url: url)
+        row.showStatus(prState: state, ci: ci)
+        placeholderRow.isHidden = true
+    }
+
+    /// GitHub 上の紐付けが解消された PR 行を取り除く。残り 0 件なら探索中表示へ戻す。
+    func removePR(url: URL) {
+        if let row = prRows.removeValue(forKey: url) {
+            prStack.removeArrangedSubview(row)
+            row.removeFromSuperview()
+        }
+        if prRows.isEmpty { showPRSearching() }
+    }
+
+    /// URL に対応する PR 行を返す (無ければ生成してスタックへ追加)。
+    private func rowForPR(_ url: URL) -> PRStatusRow {
+        if let row = prRows[url] { return row }
+        let row = PRStatusRow()
+        row.translatesAutoresizingMaskIntoConstraints = false
+        prStack.addArrangedSubview(row)
+        // 行幅をスタック幅に合わせ、各行のバッジ右端を揃える。
+        row.widthAnchor.constraint(equalTo: prStack.widthAnchor).isActive = true
+        prRows[url] = row
+        return row
+    }
+
+    private func clearPRRows() {
+        for (_, row) in prRows {
+            prStack.removeArrangedSubview(row)
+            row.removeFromSuperview()
+        }
+        prRows.removeAll()
     }
 
     // MARK: - NSTextFieldDelegate

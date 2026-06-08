@@ -52,7 +52,8 @@ final class PaneViewController: NSViewController {
 
     /// 監視ループのキャンセル用タスク。
     private var prDiscoveryTask: Task<Void, Never>?
-    private var watchTask: Task<Void, Never>?
+    /// PR URL → 監視タスク。1 Issue : N PR を URL ごとに独立監視する。
+    private var prWatchTasks: [URL: Task<Void, Never>] = [:]
     private var issueWatchTask: Task<Void, Never>?
 
     /// PR/CI 監視の間隔 (秒)。設定から取得。
@@ -71,7 +72,7 @@ final class PaneViewController: NSViewController {
             header.topAnchor.constraint(equalTo: root.topAnchor),
             header.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             header.trailingAnchor.constraint(equalTo: root.trailingAnchor),
-            header.heightAnchor.constraint(equalToConstant: 64),
+            // 高さは固定せず、ヘッダ内部の制約 (PR 行の本数) に追従させる。
 
             terminalHost.topAnchor.constraint(equalTo: header.bottomAnchor),
             terminalHost.leadingAnchor.constraint(equalTo: root.leadingAnchor),
@@ -96,7 +97,7 @@ final class PaneViewController: NSViewController {
 
     deinit {
         prDiscoveryTask?.cancel()
-        watchTask?.cancel()
+        prWatchTasks.values.forEach { $0.cancel() }
         issueWatchTask?.cancel()
     }
 
@@ -158,23 +159,18 @@ final class PaneViewController: NSViewController {
 
     // MARK: - PR 探索 → 監視
 
+    /// Issue に紐づく PR の集合を継続的に探索し、増減に追従する。
+    /// 1 Issue : N PR を前提とし、新規 PR には watcher を起動、紐付けが消えた PR は監視終了する。
+    /// (単一 PR を見つけて終了するのではなく、後から増える PR も拾えるよう探索は回し続ける)
     private func startPRDiscovery(owner: String, repo: String, issueNumber: Int) {
         prDiscoveryTask?.cancel()
         prDiscoveryTask = Task { [weak self] in
             guard let self else { return }
             while !Task.isCancelled {
                 do {
-                    if let pr = try await self.client.findPullRequest(
-                        forIssueNumber: issueNumber, owner: owner, repo: repo
-                    ) {
-                        await MainActor.run {
-                            self.header.showPR(number: pr.number, url: pr.url)
-                            self.header.showStatus(prState: pr.state, ci: GitHub.CIStatus.roll(pr.statusCheckRollup ?? []))
-                            self.startWatching(prURL: pr.url)
-                        }
-                        return // 発見したら探索終了、監視へ移行
-                    }
-                    // 見つからない (= まだ PR 未作成)。探索中表示のまま次のポーリングへ。
+                    let urls = try await self.client.linkedPullRequestURLs(
+                        owner: owner, repo: repo, issueNumber: issueNumber)
+                    await MainActor.run { self.reconcilePRWatchers(urls) }
                 } catch {
                     // gh 失敗などはユーザーに見せる (無言ループにしない)。
                     log.error("PR discovery failed: \(String(describing: error))")
@@ -182,6 +178,27 @@ final class PaneViewController: NSViewController {
                 }
                 try? await Task.sleep(nanoseconds: self.pollInterval * 1_000_000_000)
             }
+        }
+    }
+
+    /// GitHub 上の紐付け集合 `urls` に、監視タスクとヘッダ行を一致させる。
+    @MainActor
+    private func reconcilePRWatchers(_ urls: [URL]) {
+        let current = Set(urls)
+        // 紐付けが消えた PR は監視終了 + 行削除。
+        for url in prWatchTasks.keys where !current.contains(url) {
+            prWatchTasks[url]?.cancel()
+            prWatchTasks[url] = nil
+            header.removePR(url: url)
+        }
+        guard !urls.isEmpty else {
+            header.showPRSearching()
+            return
+        }
+        // 新規 PR は行を即時表示し (URL から番号)、watcher を起動して状態を埋める。
+        for url in urls where prWatchTasks[url] == nil {
+            header.ensurePR(url: url)
+            prWatchTasks[url] = makePRWatchTask(prURL: url)
         }
     }
 
@@ -206,10 +223,10 @@ final class PaneViewController: NSViewController {
         }
     }
 
-    private func startWatching(prURL: URL) {
-        watchTask?.cancel()
+    /// 1 つの PR を周期監視し、状態をその行へ反映するタスクを作る。
+    private func makePRWatchTask(prURL: URL) -> Task<Void, Never> {
         let watcher = PullRequestWatcher(prURL: prURL, client: client)
-        watchTask = Task { [weak self] in
+        return Task { [weak self] in
             guard let self else { return }
             while !Task.isCancelled {
                 if let events = try? await watcher.tick() {
@@ -217,8 +234,7 @@ final class PaneViewController: NSViewController {
                     let snapshot = await watcher.snapshot()
                     await MainActor.run {
                         if let pr = snapshot {
-                            self.header.showPR(number: pr.number, url: pr.url)
-                            self.header.showStatus(prState: pr.state, ci: ci)
+                            self.header.updatePR(url: prURL, number: pr.number, state: pr.state, ci: ci)
                         }
                         self.handleEvents(events, prURL: prURL)
                     }
@@ -237,7 +253,8 @@ final class PaneViewController: NSViewController {
     private func handleEvents(_ events: [PullRequestWatcher.Event], prURL: URL) {
         for event in events {
             guard let prompt = autoPromptRules.prompt(for: event, prURL: prURL) else { continue }
-            let key = Self.eventKey(event)
+            // クールダウンは PR ごとに分ける (別 PR の同種イベントを巻き込まない)。
+            let key = "\(prURL.absoluteString)#\(Self.eventKey(event))"
             let now = Date()
             if let last = lastAutoPromptAt[key], now.timeIntervalSince(last) < autoPromptCooldown {
                 log.info("auto-prompt suppressed (cooldown): \(key)")

@@ -106,6 +106,54 @@ struct IssuePRLinkingTests {
         #expect(url == nil)
     }
 
+    // MARK: - linkedPullRequestURLs (1 Issue : N PR)
+
+    @Test func linkedURLsReturnsAllSortedByCreatedAt() async throws {
+        // 全 PR を作成日時昇順で返す (CLOSED も含む)。
+        let runner = SequencedRunner([graphqlDated(prs: [
+            (30, "OPEN", "2024-02-01T00:00:00Z"),
+            (12, "CLOSED", "2024-01-01T00:00:00Z"),
+            (45, "MERGED", "2024-03-01T00:00:00Z"),
+        ])])
+        let client = GitHubClient(runner: runner)
+        let urls = try await client.linkedPullRequestURLs(owner: "acme", repo: "widgets", issueNumber: 42)
+        #expect(urls.map(\.absoluteString) == [
+            "https://github.com/acme/widgets/pull/12",
+            "https://github.com/acme/widgets/pull/30",
+            "https://github.com/acme/widgets/pull/45",
+        ])
+    }
+
+    @Test func linkedURLsDeduplicatesRepeatedReferences() async throws {
+        // 同一 PR が timeline で複数回参照されても 1 件に畳む。
+        let runner = SequencedRunner([graphql(prs: [(7, "OPEN"), (7, "OPEN"), (8, "OPEN")])])
+        let client = GitHubClient(runner: runner)
+        let urls = try await client.linkedPullRequestURLs(owner: "acme", repo: "widgets", issueNumber: 42)
+        #expect(urls.map(\.absoluteString) == [
+            "https://github.com/acme/widgets/pull/7",
+            "https://github.com/acme/widgets/pull/8",
+        ])
+    }
+
+    @Test func linkedURLsEmptyWhenNoNodes() async throws {
+        let runner = SequencedRunner([graphql(prs: [])])
+        let client = GitHubClient(runner: runner)
+        let urls = try await client.linkedPullRequestURLs(owner: "acme", repo: "widgets", issueNumber: 42)
+        #expect(urls.isEmpty)
+    }
+
+    @Test func findPullRequestsResolvesAll() async throws {
+        // graphql で 2 件 → 各 PR 詳細を解決して配列で返す。
+        let runner = SequencedRunner([
+            graphql(prs: [(99, "OPEN"), (100, "OPEN")]),
+            try fixtureData("pr-success"),
+            try fixtureData("pr-failure"),
+        ])
+        let client = GitHubClient(runner: runner)
+        let prs = try await client.findPullRequests(forIssueNumber: 42, owner: "acme", repo: "widgets")
+        #expect(prs.count == 2)
+    }
+
     // MARK: - findPullRequest (GraphQL → PR 詳細)
 
     @Test func findPullRequestResolvesViaGraphQL() async throws {
