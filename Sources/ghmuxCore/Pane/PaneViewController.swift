@@ -53,6 +53,7 @@ final class PaneViewController: NSViewController {
     /// 監視ループのキャンセル用タスク。
     private var prDiscoveryTask: Task<Void, Never>?
     private var watchTask: Task<Void, Never>?
+    private var issueWatchTask: Task<Void, Never>?
 
     /// PR/CI 監視の間隔 (秒)。設定から取得。
     private lazy var pollInterval: UInt64 = UInt64(max(1, config.pollIntervalSeconds))
@@ -96,6 +97,7 @@ final class PaneViewController: NSViewController {
     deinit {
         prDiscoveryTask?.cancel()
         watchTask?.cancel()
+        issueWatchTask?.cancel()
     }
 
     /// 端末をキーボードフォーカスにする (分割直後・フォーカス移動時に呼ぶ)。
@@ -127,6 +129,7 @@ final class PaneViewController: NSViewController {
             do {
                 let issue = try await client.fetchIssue(url: url)
                 header.showIssue(title: issue.title, number: issue.number, url: issue.url)
+                header.showIssueStatus(state: issue.state)
 
                 // ClaudeSession を起動 (PTY へ claude コマンドを送る)。
                 // 本文はペーストで投入し、Enter で実行確定する (bracketed paste 対策)。
@@ -140,6 +143,9 @@ final class PaneViewController: NSViewController {
                     promptTemplate: config.initialPrompt,
                     agentCommand: config.agentCommand
                 )
+
+                // Issue 自体の Open/Close も継続監視する (作業中に閉じられることがある)。
+                startIssueWatching(url: issue.url)
 
                 // Issue を参照する PR が現れるのを待つ。
                 header.showPRSearching()
@@ -183,6 +189,21 @@ final class PaneViewController: NSViewController {
     private func shortError(_ error: Error) -> String {
         let s = String(describing: error)
         return s.count > 80 ? String(s.prefix(80)) + "…" : s
+    }
+
+    /// Issue の Open/Close 状態を定期的に再取得してバッジを更新する。
+    /// 初期表示は handleIssueSubmission で済ませているので、ここは次回以降の差分を拾う。
+    private func startIssueWatching(url: URL) {
+        issueWatchTask?.cancel()
+        issueWatchTask = Task { [weak self] in
+            guard let self else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: self.pollInterval * 1_000_000_000)
+                if let issue = try? await self.client.fetchIssue(url: url) {
+                    await MainActor.run { self.header.showIssueStatus(state: issue.state) }
+                }
+            }
+        }
     }
 
     private func startWatching(prURL: URL) {

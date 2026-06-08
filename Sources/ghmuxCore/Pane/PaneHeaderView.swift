@@ -75,6 +75,7 @@ final class PaneHeaderView: NSView, NSTextFieldDelegate {
 
     private let issueField = PasteableTextField()
     private let issueTitleLabel = LinkLabel(labelWithString: "")
+    private let issueBadge = NSTextField(labelWithString: "")
     private let prLabel = LinkLabel(labelWithString: "PR: (none)")
     private let ciBadge = NSTextField(labelWithString: "")
     private let splitRightButton = NSButton()
@@ -94,15 +95,24 @@ final class PaneHeaderView: NSView, NSTextFieldDelegate {
         issueTitleLabel.font = NSFont.systemFont(ofSize: 11, weight: .medium)
         issueTitleLabel.textColor = NSColor.labelColor
         issueTitleLabel.lineBreakMode = .byTruncatingTail
+        // 長いタイトルはバッジを押し出さず省略させる (バッジの右寄せを優先)。
+        issueTitleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         issueTitleLabel.translatesAutoresizingMaskIntoConstraints = false
 
         prLabel.font = NSFont.systemFont(ofSize: 11)
         prLabel.textColor = NSColor.secondaryLabelColor
         prLabel.translatesAutoresizingMaskIntoConstraints = false
 
+        // バッジは最小幅 + 左揃えで、状態文字列の長短によらず先頭の記号位置を揃える。
         ciBadge.font = NSFont.systemFont(ofSize: 13)
         ciBadge.textColor = NSColor.tertiaryLabelColor
+        ciBadge.alignment = .left
         ciBadge.translatesAutoresizingMaskIntoConstraints = false
+
+        issueBadge.font = NSFont.systemFont(ofSize: 13)
+        issueBadge.textColor = NSColor.tertiaryLabelColor
+        issueBadge.alignment = .left
+        issueBadge.translatesAutoresizingMaskIntoConstraints = false
 
         configureSplitButton(splitRightButton, symbol: "square.split.2x1", tip: "Split Right",
                              action: #selector(didTapSplitRight))
@@ -111,10 +121,15 @@ final class PaneHeaderView: NSView, NSTextFieldDelegate {
 
         addSubview(issueField)
         addSubview(issueTitleLabel)
+        addSubview(issueBadge)
         addSubview(prLabel)
         addSubview(ciBadge)
         addSubview(splitRightButton)
         addSubview(splitDownButton)
+
+        // 状態バッジの最小幅。最長文字列 ("🟣 Closed" / "✅ Merged") が収まり、
+        // 記号 (先頭) が常に同じ x 位置に来る幅。両バッジで共有して列を揃える。
+        let badgeMinWidth: CGFloat = 80
 
         NSLayoutConstraint.activate([
             issueField.topAnchor.constraint(equalTo: topAnchor, constant: 6),
@@ -132,16 +147,24 @@ final class PaneHeaderView: NSView, NSTextFieldDelegate {
             splitRightButton.widthAnchor.constraint(equalToConstant: 18),
             splitRightButton.heightAnchor.constraint(equalToConstant: 18),
 
+            // Issue 行 (タイトル + 状態バッジ)。PR 行と同じ「ラベルは leading 固定 /
+            // バッジは trailing 固定 + leading >= ラベル trailing」パターンで右寄せする。
             issueTitleLabel.topAnchor.constraint(equalTo: issueField.bottomAnchor, constant: 4),
             issueTitleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
-            issueTitleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
 
+            issueBadge.centerYAnchor.constraint(equalTo: issueTitleLabel.centerYAnchor),
+            issueBadge.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            issueBadge.leadingAnchor.constraint(greaterThanOrEqualTo: issueTitleLabel.trailingAnchor, constant: 8),
+            issueBadge.widthAnchor.constraint(greaterThanOrEqualToConstant: badgeMinWidth),
+
+            // PR 行 (PR リンク + 状態/CI バッジ)。
             prLabel.topAnchor.constraint(equalTo: issueTitleLabel.bottomAnchor, constant: 2),
             prLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
 
             ciBadge.centerYAnchor.constraint(equalTo: prLabel.centerYAnchor),
             ciBadge.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
             ciBadge.leadingAnchor.constraint(greaterThanOrEqualTo: prLabel.trailingAnchor, constant: 8),
+            ciBadge.widthAnchor.constraint(greaterThanOrEqualToConstant: badgeMinWidth),
         ])
     }
 
@@ -185,6 +208,20 @@ final class PaneHeaderView: NSView, NSTextFieldDelegate {
 
     func showIssueError(_ message: String) {
         issueTitleLabel.setLink("⚠️ \(message)", url: nil)
+        issueBadge.stringValue = ""
+        issueBadge.toolTip = nil
+    }
+
+    /// Issue の Open/Close 状態をタイトル行右端のバッジに表示する。
+    func showIssueStatus(state: GitHub.Issue.State) {
+        switch state {
+        case .open:
+            issueBadge.stringValue = "🟢 Open"
+            issueBadge.toolTip = "Issue open"
+        case .closed:
+            issueBadge.stringValue = "🟣 Closed"
+            issueBadge.toolTip = "Issue closed"
+        }
     }
 
     /// PR をクリック可能なリンクとして表示する (番号のみ。状態はステータスバッジへ集約)。
