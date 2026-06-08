@@ -266,6 +266,28 @@ extension Ghostty {
         public override func mouseMoved(with event: NSEvent) { reportMousePos(event) }
         public override func mouseDragged(with event: NSEvent) { reportMousePos(event) }
 
+        public override func mouseExited(with event: NSEvent) {
+            guard let surface else { return }
+            // ビューポート外に出たことを負値で通知 (本家と同様)。ホバーセルの残留を防ぐ。
+            let mods = Ghostty.ghosttyMods(event.modifierFlags)
+            ghostty_surface_mouse_pos(surface, -1, -1, mods)
+        }
+
+        /// マウス移動 (mouseMoved) を受け取るためのトラッキングエリアを張る。
+        ///
+        /// これが無いと `mouseMoved` が一切配信されず、libghostty 内部のマウス位置が
+        /// 古いままになる。その状態でクリックすると選択の起点が実際のポインタ位置とズレ、
+        /// 狙った文字を選択できない。本家 (vendor/ghostty SurfaceView_AppKit) と同じ設定。
+        public override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+            trackingAreas.forEach { removeTrackingArea($0) }
+            addTrackingArea(NSTrackingArea(
+                rect: bounds,
+                options: [.mouseEnteredAndExited, .mouseMoved, .inVisibleRect, .activeAlways],
+                owner: self,
+                userInfo: nil))
+        }
+
         private func reportMousePos(_ event: NSEvent) {
             guard let surface else { return }
             let pos = convert(event.locationInWindow, from: nil)
