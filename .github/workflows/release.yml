@@ -1,0 +1,97 @@
+name: Release
+
+# タグ (vX.Y.Z) を push するとアプリをビルドし、成果物 (tar.gz) を
+# GitHub Release に添付して配布する。
+# workflow_dispatch でも実行でき、その場合はタグを打つ前に
+# ビルド成否を確認できるよう成果物を Actions のアーティファクトとして上げる。
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+# Release 作成にはリポジトリへの書き込み権限が必要。
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    # ローカルのビルドパッチ (patch-zig.sh の host バージョンクランプ, vendor/bin/xcrun
+    # ラッパー) は macOS 26.5 / Xcode 26.5 前提で書かれているため、同系のランナーを使う。
+    # GhosttyKit.xcframework は macos-arm64 スライスのみ → arm64 ランナーが必須。
+    runs-on: macos-26
+
+    steps:
+      - name: Checkout (submodule 込み)
+        uses: actions/checkout@v4
+        with:
+          # vendor/ghostty submodule (公開 URL) を取得。libghostty のソース。
+          submodules: recursive
+
+      - name: Xcode を選択
+        run: |
+          # build-libghostty.sh は Metal シェーダコンパイラのため DEVELOPER_DIR を
+          # Xcode.app に向ける必要がある。
+          sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+          echo "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer" >> "$GITHUB_ENV"
+          xcodebuild -version
+          swift --version
+
+      - name: Metal Toolchain を確保
+        run: |
+          # libghostty のシェーダビルドに metal コンパイラが必要。
+          # Xcode 16+ では別コンポーネント扱いのため、未導入なら取得を試みる。
+          if ! xcrun --find metal >/dev/null 2>&1; then
+            xcodebuild -downloadComponent MetalToolchain || true
+          fi
+          xcrun --find metal || echo "metal が見つかりません (build-libghostty で失敗する可能性)"
+
+      - name: Zig 0.15.2 を導入
+        run: ./scripts/install-zig.sh
+
+      - name: ビルドパッチを適用
+        run: |
+          # 両スクリプトとも冪等 (適用済みマーカーを検出すると何もしない)。
+          ./scripts/patch-zig.sh
+          ./scripts/patch-ghostty.sh
+
+      - name: libghostty (GhosttyKit.xcframework) をビルド
+        run: ./scripts/build-libghostty.sh
+
+      - name: ghmux をリリースビルド
+        run: swift build -c release --product ghmux
+
+      - name: 成果物を tar.gz にパッケージ
+        run: |
+          set -euo pipefail
+          BIN="$(swift build -c release --show-bin-path)"
+          STAGE="ghmux-${GITHUB_REF_NAME}-macos-arm64"
+          mkdir -p "dist/${STAGE}/bin"
+          cp "${BIN}/ghmux" "dist/${STAGE}/bin/ghmux"
+          # terminfo / シェル統合リソース。生成されていれば bin/ の隣に同梱する。
+          # 実行時に Bundle.main.bundlePath/../ghostty-resources として発見される配置。
+          if [ -d Vendored/ghostty-resources ]; then
+            cp -R Vendored/ghostty-resources "dist/${STAGE}/ghostty-resources"
+          else
+            echo "ghostty-resources 未生成 — terminfo 同梱をスキップ (動作は degrade のみ)"
+          fi
+          tar -czf "dist/${STAGE}.tar.gz" -C dist "${STAGE}"
+          shasum -a 256 "dist/${STAGE}.tar.gz" | tee "dist/${STAGE}.tar.gz.sha256"
+          echo "STAGE=${STAGE}" >> "$GITHUB_ENV"
+
+      - name: アーティファクトをアップロード (手動実行時の検証用)
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.STAGE }}
+          path: dist/*.tar.gz
+
+      - name: GitHub Release を作成 (タグ push 時)
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.tar.gz
+            dist/*.sha256
+          generate_release_notes: true
+          fail_on_unmatched_files: true
