@@ -16,10 +16,13 @@ permissions:
 
 jobs:
   build-release:
-    # ローカルのビルドパッチ (patch-zig.sh の host バージョンクランプ, vendor/bin/xcrun
-    # ラッパー) は macOS 26.5 / Xcode 26.5 前提で書かれているため、同系のランナーを使う。
+    # macos-15 (arm64) を使う。理由: Zig 0.15.2 が公式サポートする正常な MacOSX15.sdk
+    # が存在し、macOS 26 SDK の libSystem.tbd が arm64-macos を欠く問題が発生しない。
+    # (macos-26 ランナーは Xcode/CLT とも macOS 26 SDK しか無く、Zig 0.15.2 のリンクが
+    #  失敗する。ローカルの CLT-SDK 回避ラッパーも逃がし先が同問題のため効かない。)
+    # patch-zig の host クランプは host<16 で no-op、patch-ghostty は SDK 非依存で有効。
     # GhosttyKit.xcframework は macos-arm64 スライスのみ → arm64 ランナーが必須。
-    runs-on: macos-26
+    runs-on: macos-15
 
     steps:
       - name: Checkout (submodule 込み)
