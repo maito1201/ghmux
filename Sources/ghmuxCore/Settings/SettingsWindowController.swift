@@ -86,7 +86,7 @@ final class SettingsViewController: NSViewController {
         scroll.hasVerticalScroller = true
         scroll.drawsBackground = false
         scroll.translatesAutoresizingMaskIntoConstraints = false
-        let doc = NSView()
+        let doc = FlippedView()
         doc.translatesAutoresizingMaskIntoConstraints = false
         doc.addSubview(stack)
         scroll.documentView = doc
@@ -252,4 +252,10 @@ final class SettingsViewController: NSViewController {
     @objc private func cancel() {
         view.window?.close()
     }
+}
+
+/// スクロール領域の document view 用。左上原点にすることで、起動時に
+/// 内容の最上部が表示される (非 flipped だと NSScrollView は下端から表示する)。
+private final class FlippedView: NSView {
+    override var isFlipped: Bool { true }
 }
