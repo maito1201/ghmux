@@ -24,15 +24,43 @@ public struct GhmuxConfig: Codable, Equatable, Sendable {
 
     public struct AutoPrompts: Codable, Equatable, Sendable {
         public var ciFailed: String
+        public var ciPassed: String
         public var changesRequested: String
         public var commented: String
         public var mergeConflict: String
 
         enum CodingKeys: String, CodingKey {
             case ciFailed = "ci_failed"
+            case ciPassed = "ci_passed"
             case changesRequested = "changes_requested"
             case commented
             case mergeConflict = "merge_conflict"
+        }
+
+        public init(
+            ciFailed: String,
+            ciPassed: String,
+            changesRequested: String,
+            commented: String,
+            mergeConflict: String
+        ) {
+            self.ciFailed = ciFailed
+            self.ciPassed = ciPassed
+            self.changesRequested = changesRequested
+            self.commented = commented
+            self.mergeConflict = mergeConflict
+        }
+
+        /// 欠落キーは個別にデフォルト補完する。既存ユーザーの config.toml に `ci_passed`
+        /// など一部キーが無くても、auto_prompts 全体をデフォルトに巻き戻さないため。
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            let def = GhmuxConfig.default.autoPrompts
+            self.ciFailed = (try c.decodeIfPresent(String.self, forKey: .ciFailed)) ?? def.ciFailed
+            self.ciPassed = (try c.decodeIfPresent(String.self, forKey: .ciPassed)) ?? def.ciPassed
+            self.changesRequested = (try c.decodeIfPresent(String.self, forKey: .changesRequested)) ?? def.changesRequested
+            self.commented = (try c.decodeIfPresent(String.self, forKey: .commented)) ?? def.commented
+            self.mergeConflict = (try c.decodeIfPresent(String.self, forKey: .mergeConflict)) ?? def.mergeConflict
         }
     }
 
@@ -80,6 +108,7 @@ public struct GhmuxConfig: Codable, Equatable, Sendable {
         pollIntervalSeconds: 15,
         autoPrompts: AutoPrompts(
             ciFailed: "PR {url} の CI が失敗しました。失敗ジョブ: {failingChecks}\nログを確認して修正してください。",
+            ciPassed: "PR {url} の CI が Pass しました。PR のコメントや最新の状況を再確認して、タスクが完了しているか確認してください。",
             changesRequested: "PR {url} に @{reviewer} から修正リクエストが付きました。\n\n{body}\n\nコメントを取り込んで修正をお願いします。",
             commented: "PR {url} に @{reviewer} からコメントが付きました。\n\n{body}\n\n対応が必要なら修正してください。",
             mergeConflict: "PR {url} がベースブランチとコンフリクトしました。解消してください。"
@@ -166,8 +195,11 @@ public struct GhmuxConfig: Codable, Equatable, Sendable {
 
         # PR の状態変化時に claude へ自動送信するプロンプト。
         # ci_failed / commented で使えるプレースホルダ: {url} {failingChecks} {reviewer} {body}
+        # ci_passed は CI が「実行中→成功」または「失敗→再 run で成功」に変化したときだけ送信される
+        # (誤発火回避のため、初回観測や noChecks 起点では送信しない)。使えるプレースホルダ: {url}
         [auto_prompts]
         ci_failed = "PR {url} の CI が失敗しました。失敗ジョブ: {failingChecks}\\nログを確認して修正してください。"
+        ci_passed = "PR {url} の CI が Pass しました。PR のコメントや最新の状況を再確認して、タスクが完了しているか確認してください。"
         changes_requested = "PR {url} に @{reviewer} から修正リクエストが付きました。\\n\\n{body}\\n\\nコメントを取り込んで修正をお願いします。"
         commented = "PR {url} に @{reviewer} からコメントが付きました。\\n\\n{body}\\n\\n対応が必要なら修正してください。"
         merge_conflict = "PR {url} がベースブランチとコンフリクトしました。解消してください。"

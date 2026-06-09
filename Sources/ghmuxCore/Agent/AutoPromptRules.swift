@@ -12,6 +12,11 @@ public struct AutoPromptRules: Sendable {
             "PR {url} の CI が失敗しました。失敗ジョブ: {failingChecks}\n"
             + "ログを確認して修正してください。"
 
+        /// CI が Pass (全通過) した。`{url}` を置換。
+        public var ciPassed: String =
+            "PR {url} の CI が Pass しました。"
+            + "PR のコメントや最新の状況を再確認して、タスクが完了しているか確認してください。"
+
         /// CHANGES_REQUESTED レビューが付いた。`{url}` `{reviewer}` `{body}` を置換。
         public var changesRequested: String =
             "PR {url} に @{reviewer} から修正リクエストが付きました。\n\n"
@@ -39,6 +44,7 @@ public struct AutoPromptRules: Sendable {
     public init(config: GhmuxConfig.AutoPrompts) {
         var t = Templates()
         t.ciFailed = config.ciFailed
+        t.ciPassed = config.ciPassed
         t.changesRequested = config.changesRequested
         t.commented = config.commented
         t.mergeConflict = config.mergeConflict
@@ -49,7 +55,7 @@ public struct AutoPromptRules: Sendable {
     /// 対応するルールが無い (= 何もしないべき) イベントには `nil` を返す。
     public func prompt(for event: PullRequestWatcher.Event, prURL: URL) -> String? {
         switch event {
-        case .ciStateChanged(_, let to):
+        case .ciStateChanged(let from, let to):
             switch to {
             case .failure(let failingChecks):
                 return render(
@@ -59,8 +65,18 @@ public struct AutoPromptRules: Sendable {
                         "failingChecks": failingChecks.joined(separator: ", "),
                     ]
                 )
-            case .success, .pending, .noChecks:
-                return nil // 成功や待ち中はプロンプト不要
+            case .success:
+                // 誤発火回避: 直前の監視で CI が実際に動いていた (pending) か、
+                // 失敗していた (failure→再 run で成功) 場合のみ発火する。
+                // noChecks 起点 (チェック未観測のまま緑) や初回観測では発火させない。
+                switch from {
+                case .pending, .failure:
+                    return render(templates.ciPassed, ["url": prURL.absoluteString])
+                case .success, .noChecks:
+                    return nil
+                }
+            case .pending, .noChecks:
+                return nil // 待ち中はプロンプト不要
             }
 
         case .reviewAdded(let review):

@@ -17,9 +17,26 @@ struct AutoPromptRulesTests {
         #expect(prompt?.contains("test, lint") == true)
     }
 
-    @Test func ciSuccessReturnsNil() {
+    @Test func ciPassFromPendingProducesPrompt() {
         let rules = AutoPromptRules()
         let event = PullRequestWatcher.Event.ciStateChanged(from: .pending, to: .success)
+        let prompt = rules.prompt(for: event, prURL: prURL)
+        #expect(prompt?.contains("https://github.com/acme/widgets/pull/99") == true)
+        #expect(prompt?.contains("Pass") == true)
+    }
+
+    @Test func ciPassFromFailureProducesPrompt() {
+        let rules = AutoPromptRules()
+        let event = PullRequestWatcher.Event.ciStateChanged(
+            from: .failure(failingChecks: ["test"]), to: .success
+        )
+        #expect(rules.prompt(for: event, prURL: prURL)?.contains("Pass") == true)
+    }
+
+    // 誤発火回避: チェック未観測 (noChecks) のまま緑になっても発火しない。
+    @Test func ciPassFromNoChecksReturnsNil() {
+        let rules = AutoPromptRules()
+        let event = PullRequestWatcher.Event.ciStateChanged(from: .noChecks, to: .success)
         #expect(rules.prompt(for: event, prURL: prURL) == nil)
     }
 

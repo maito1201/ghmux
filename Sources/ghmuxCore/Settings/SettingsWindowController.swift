@@ -29,6 +29,7 @@ final class SettingsViewController: NSViewController {
     private let agentCommandField = NSTextField()
     private let intervalField = NSTextField()
     private let ciFailedView = SettingsViewController.makeTextView(height: 130)
+    private let ciPassedView = SettingsViewController.makeTextView(height: 130)
     private let changesRequestedView = SettingsViewController.makeTextView(height: 130)
     private let commentedView = SettingsViewController.makeTextView(height: 130)
     private let mergeConflictView = SettingsViewController.makeTextView(height: 100)
@@ -57,6 +58,10 @@ final class SettingsViewController: NSViewController {
             title: "CI 失敗時の自動プロンプト",
             help: "プレースホルダ: {url} {failingChecks}",
             field: ciFailedView.scroll))
+        stack.addArrangedSubview(section(
+            title: "CI Pass 時の自動プロンプト",
+            help: "CI が「実行中→成功」または「失敗→再 run で成功」に変化したときのみ送信。プレースホルダ: {url}",
+            field: ciPassedView.scroll))
         stack.addArrangedSubview(section(
             title: "修正リクエスト時の自動プロンプト",
             help: "プレースホルダ: {url} {reviewer} {body}",
@@ -205,6 +210,7 @@ final class SettingsViewController: NSViewController {
         agentCommandField.stringValue = config.agentCommand
         intervalField.stringValue = String(config.pollIntervalSeconds)
         ciFailedView.text.string = config.autoPrompts.ciFailed
+        ciPassedView.text.string = config.autoPrompts.ciPassed
         changesRequestedView.text.string = config.autoPrompts.changesRequested
         commentedView.text.string = config.autoPrompts.commented
         mergeConflictView.text.string = config.autoPrompts.mergeConflict
@@ -220,6 +226,7 @@ final class SettingsViewController: NSViewController {
             pollIntervalSeconds: max(1, interval),
             autoPrompts: .init(
                 ciFailed: ciFailedView.text.string,
+                ciPassed: ciPassedView.text.string,
                 changesRequested: changesRequestedView.text.string,
                 commented: commentedView.text.string,
                 mergeConflict: mergeConflictView.text.string

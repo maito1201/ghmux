@@ -268,7 +268,9 @@ final class PaneViewController: NSViewController {
     /// イベントの種類キー (クールダウン判定用)。同じ種類は一定時間再送しない。
     private static func eventKey(_ event: PullRequestWatcher.Event) -> String {
         switch event {
-        case .ciStateChanged: return "ci"
+        // CI 成功は別キーにして、直前の ci 失敗プロンプトのクールダウンに巻き込まれず
+        // 確実に Pass フックを発火させる。失敗の連続再送抑止は "ci" のまま維持。
+        case .ciStateChanged(_, let to): return to == .success ? "ci-pass" : "ci"
         case .mergeableChanged: return "mergeable"
         case .reviewAdded: return "review"
         case .stateChanged: return "state"

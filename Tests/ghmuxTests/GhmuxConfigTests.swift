@@ -21,6 +21,10 @@ struct GhmuxConfigTests {
         #expect(config.pollIntervalSeconds == 30)
         #expect(config.autoPrompts.ciFailed == "CI落ちた {url}")
         #expect(config.autoPrompts.mergeConflict == "conflict {url}")
+        // ci_passed を含まない既存設定でも、他キーは保持し ci_passed のみデフォルト補完する
+        // (auto_prompts 全体がデフォルトへ巻き戻らないことの後方互換検証)。
+        #expect(config.autoPrompts.changesRequested == "直して {reviewer}")
+        #expect(config.autoPrompts.ciPassed == GhmuxConfig.default.autoPrompts.ciPassed)
     }
 
     @Test func missingKeysFallBackToDefault() throws {
@@ -72,6 +76,7 @@ struct GhmuxConfigTests {
             pollIntervalSeconds: 42,
             autoPrompts: .init(
                 ciFailed: "CI fail {url}\n{failingChecks}",
+                ciPassed: "CI pass {url}",
                 changesRequested: "fix {reviewer}",
                 commented: "comment {body}",
                 mergeConflict: "conflict"
