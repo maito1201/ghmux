@@ -24,11 +24,10 @@ extension Ghostty {
             // libghostty のグローバル初期化 (プロセス一度きり)。
             ghostty_init(UInt(CommandLine.argc), CommandLine.unsafeArgv)
 
-            // GHOSTTY_RESOURCES_DIR: terminfo / シェル統合の探索先。
-            // build-libghostty.sh が Vendored/ghostty-resources にコピーしている場合に指す。
-            if let resources = Self.resourcesDirectory {
-                setenv("GHOSTTY_RESOURCES_DIR", resources, 1)
-            }
+            // 同梱リソース (themes / shell-integration / terminfo) を pane の PTY に伝える。
+            // ここで setenv したものは Ghostty.swift の per-surface env_vars が継承するため
+            // pane 内のシェルまで伝播する。
+            Self.configureResourceEnvironment()
 
             // 設定をロード (~/.config/ghostty/config を継承)。
             guard let cfg = ghostty_config_new() else {
@@ -123,18 +122,58 @@ extension Ghostty {
             pb.setString(str, forType: .string)
         }
 
-        /// Vendored/ghostty-resources が存在すればそのパスを返す。
-        private static var resourcesDirectory: String? {
-            // 実行バイナリからの相対 + よく使う固定パスを探索する。
-            let candidates: [String] = [
-                Bundle.main.bundlePath + "/../ghostty-resources",
-                FileManager.default.currentDirectoryPath + "/Vendored/ghostty-resources",
-            ]
-            for path in candidates {
+        /// 同梱リソースに基づき GHOSTTY_RESOURCES_DIR / TERMINFO / COLORTERM を設定する。
+        /// TERM は libghostty が xterm-ghostty を立てるため触らない (未設定時のみ補完)。
+        private static func configureResourceEnvironment() {
+            guard let root = resolvedResourcesRoot() else { return }
+            let fm = FileManager.default
+
+            // themes / shell-integration の探索先。
+            setenv("GHOSTTY_RESOURCES_DIR", root + "/ghostty", 1)
+
+            // ncurses が xterm-ghostty を解決するための terminfo DB。
+            // これが無いと pane 内の vim/less/tmux 等が "terminal is not fully functional" になる。
+            let terminfo = root + "/terminfo"
+            var isDir: ObjCBool = false
+            if fm.fileExists(atPath: terminfo, isDirectory: &isDir), isDir.boolValue,
+                getenv("TERMINFO") == nil {
+                setenv("TERMINFO", terminfo, 1)
+            }
+
+            if getenv("COLORTERM") == nil {
+                setenv("COLORTERM", "truecolor", 1)
+            }
+            if getenv("TERM") == nil {
+                setenv("TERM", "xterm-ghostty", 1)
+            }
+        }
+
+        /// 同梱リソース root (配下に `ghostty/` と `terminfo/` を持つ) を解決する。
+        /// テスト容易化のため探索ロジックを純関数に分離する。
+        static func resolvedResourcesRoot(
+            bundlePath: String = Bundle.main.bundlePath,
+            currentDirectory: String = FileManager.default.currentDirectoryPath,
+            systemGhosttyResources: String = "/Applications/Ghostty.app/Contents/Resources/ghostty",
+            fileManager: FileManager = .default
+        ) -> String? {
+            func isDirectory(_ path: String) -> Bool {
                 var isDir: ObjCBool = false
-                if FileManager.default.fileExists(atPath: path, isDirectory: &isDir), isDir.boolValue {
-                    return path
-                }
+                return fileManager.fileExists(atPath: path, isDirectory: &isDir) && isDir.boolValue
+            }
+
+            // 1. 配布バイナリ隣接 / 2. 開発時のソースツリー。
+            let candidates = [
+                bundlePath + "/../ghostty-resources",
+                currentDirectory + "/Vendored/ghostty-resources",
+            ]
+            for path in candidates where isDirectory(path) {
+                return path
+            }
+
+            // 3. システムにインストール済みの Ghostty.app をフォールバックに使う。
+            //    systemGhosttyResources は <root>/ghostty を指すため、その親を root とする。
+            if isDirectory(systemGhosttyResources) {
+                return (systemGhosttyResources as NSString).deletingLastPathComponent
             }
             return nil
         }

@@ -83,17 +83,29 @@ HDR_DST="$ROOT/Sources/CGhostty/include/ghostty.h"
 cp "$HDR_SRC" "$HDR_DST"
 echo "  $HDR_DST"
 
-step "GHOSTTY_RESOURCES_DIR 用リソースをコピー"
-# terminfo (xterm-ghostty) / シェル統合スクリプト。Ghostty.App が setenv で参照する。
-RES_SRC="$GHOSTTY_DIR/zig-out/share/ghostty"
+step "GHOSTTY_RESOURCES_DIR / terminfo 用リソースをコピー"
+# ghostty 標準レイアウトに合わせ、リソース root の下に ghostty/ と terminfo/ を並べる。
+# Ghostty.App が GHOSTTY_RESOURCES_DIR=<root>/ghostty, TERMINFO=<root>/terminfo を setenv する。
+#   <root>/ghostty   : themes / shell-integration (share/ghostty)
+#   <root>/terminfo  : コンパイル済み xterm-ghostty (share/terminfo) ← これが無いと
+#                      pane 内の ncurses が xterm-ghostty を解決できず端末が degrade する。
+GHOSTTY_SRC="$GHOSTTY_DIR/zig-out/share/ghostty"
+TERMINFO_SRC="$GHOSTTY_DIR/zig-out/share/terminfo"
 RES_DST="$ROOT/Vendored/ghostty-resources"
-if [ -d "$RES_SRC" ]; then
+if [ -d "$GHOSTTY_SRC" ]; then
     rm -rf "$RES_DST"
-    mkdir -p "$RES_DST"
-    rsync -a "$RES_SRC/" "$RES_DST/"
-    echo "  $RES_DST"
+    mkdir -p "$RES_DST/ghostty"
+    rsync -a "$GHOSTTY_SRC/" "$RES_DST/ghostty/"
+    echo "  $RES_DST/ghostty"
+    if [ -d "$TERMINFO_SRC" ]; then
+        mkdir -p "$RES_DST/terminfo"
+        rsync -a "$TERMINFO_SRC/" "$RES_DST/terminfo/"
+        echo "  $RES_DST/terminfo"
+    else
+        echo "  (share/terminfo 未生成 — terminfo 同梱をスキップ: pane 内端末が degrade する)"
+    fi
 else
-    echo "  (share/ghostty 未生成 — terminfo 同梱はスキップ)"
+    echo "  (share/ghostty 未生成 — リソース同梱をスキップ)"
 fi
 
 step "完了"

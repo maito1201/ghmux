@@ -46,3 +46,64 @@ struct GhosttySurfaceTests {
         #expect(config.environment["FOO"] == "bar")
     }
 }
+
+@Suite("Ghostty.App resource resolution")
+struct GhosttyAppResourceTests {
+    private let fm = FileManager.default
+
+    /// 一意な作業ディレクトリを作り、相対パス群を mkdir -p する。
+    private func makeBase(_ relativeDirs: [String]) throws -> URL {
+        let base = fm.temporaryDirectory.appendingPathComponent("ghmux-res-\(UUID().uuidString)")
+        for rel in relativeDirs {
+            try fm.createDirectory(at: base.appendingPathComponent(rel), withIntermediateDirectories: true)
+        }
+        return base
+    }
+
+    @Test func prefersBundleAdjacentRoot() throws {
+        // bin/ (実在) と隣の ghostty-resources/ を用意。bundlePath を base/bin に見立てる。
+        let base = try makeBase(["bin", "ghostty-resources/ghostty", "ghostty-resources/terminfo"])
+        defer { try? fm.removeItem(at: base) }
+
+        let resolved = Ghostty.App.resolvedResourcesRoot(
+            bundlePath: base.path + "/bin",
+            currentDirectory: "/nonexistent",
+            systemGhosttyResources: "/nonexistent/ghostty"
+        )
+        #expect(resolved == base.path + "/bin/../ghostty-resources")
+    }
+
+    @Test func fallsBackToCurrentDirectory() throws {
+        let base = try makeBase(["Vendored/ghostty-resources/ghostty"])
+        defer { try? fm.removeItem(at: base) }
+
+        let resolved = Ghostty.App.resolvedResourcesRoot(
+            bundlePath: "/nonexistent/bin",
+            currentDirectory: base.path,
+            systemGhosttyResources: "/nonexistent/ghostty"
+        )
+        #expect(resolved == base.path + "/Vendored/ghostty-resources")
+    }
+
+    @Test func fallsBackToSystemGhosttyParent() throws {
+        // systemGhosttyResources は <root>/ghostty を指すため、その親が root として返る。
+        let base = try makeBase(["ghostty"])
+        defer { try? fm.removeItem(at: base) }
+
+        let resolved = Ghostty.App.resolvedResourcesRoot(
+            bundlePath: "/nonexistent/bin",
+            currentDirectory: "/nonexistent",
+            systemGhosttyResources: base.path + "/ghostty"
+        )
+        #expect(resolved == base.path)
+    }
+
+    @Test func returnsNilWhenNothingExists() {
+        let resolved = Ghostty.App.resolvedResourcesRoot(
+            bundlePath: "/nonexistent/bin",
+            currentDirectory: "/nonexistent",
+            systemGhosttyResources: "/nonexistent/ghostty"
+        )
+        #expect(resolved == nil)
+    }
+}

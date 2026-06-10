@@ -71,12 +71,13 @@ jobs:
           STAGE="ghmux-${GITHUB_REF_NAME}-macos-arm64"
           mkdir -p "dist/${STAGE}/bin"
           cp "${BIN}/ghmux" "dist/${STAGE}/bin/ghmux"
-          # terminfo / シェル統合リソース。生成されていれば bin/ の隣に同梱する。
-          # 実行時に Bundle.main.bundlePath/../ghostty-resources として発見される配置。
+          # リソース root (配下に ghostty/ と terminfo/)。bin/ の隣に同梱する。
+          # 実行時に Bundle.main.bundlePath/../ghostty-resources として発見され、
+          # Ghostty.App が GHOSTTY_RESOURCES_DIR / TERMINFO を setenv する配置。
           if [ -d Vendored/ghostty-resources ]; then
             cp -R Vendored/ghostty-resources "dist/${STAGE}/ghostty-resources"
           else
-            echo "ghostty-resources 未生成 — terminfo 同梱をスキップ (動作は degrade のみ)"
+            echo "ghostty-resources 未生成 — terminfo 同梱をスキップ (pane 内端末が degrade する)"
           fi
           tar -czf "dist/${STAGE}.tar.gz" -C dist "${STAGE}"
           shasum -a 256 "dist/${STAGE}.tar.gz" | tee "dist/${STAGE}.tar.gz.sha256"
@@ -97,4 +98,15 @@ jobs:
             dist/*.tar.gz
             dist/*.sha256
           generate_release_notes: true
+          append_body: true
+          body: |
+            ### インストール
+
+            未署名バイナリのため、初回のみ Gatekeeper の隔離属性を解除してください:
+
+            ```sh
+            tar -xzf ghmux-<version>-macos-arm64.tar.gz
+            xattr -dr com.apple.quarantine ghmux-<version>-macos-arm64/bin/ghmux
+            ./ghmux-<version>-macos-arm64/bin/ghmux
+            ```
           fail_on_unmatched_files: true
