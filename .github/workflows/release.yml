@@ -93,7 +93,8 @@ jobs:
           # ドラッグインストール体験のため /Applications シンボリックリンクを同梱。
           ln -s /Applications dist/stage/Applications
           hdiutil create -volname ghmux -srcfolder dist/stage -ov -format UDZO "dist/${STAGE}.dmg"
-          shasum -a 256 "dist/${STAGE}.dmg" | tee "dist/${STAGE}.dmg.sha256"
+          # ダウンロード後に `shasum -c` が通るよう、dist/ 内で実行してベース名のみ記録する。
+          ( cd dist && shasum -a 256 "${STAGE}.dmg" | tee "${STAGE}.dmg.sha256" )
           echo "STAGE=${STAGE}" >> "$GITHUB_ENV"
 
       - name: アーティファクトをアップロード (手動実行時の検証用)
