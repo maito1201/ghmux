@@ -64,23 +64,36 @@ jobs:
       - name: ghmux をリリースビルド
         run: swift build -c release --product ghmux
 
-      - name: 成果物を tar.gz にパッケージ
+      - name: ghmux.app を組み立てて .dmg にパッケージ
         run: |
           set -euo pipefail
           BIN="$(swift build -c release --show-bin-path)"
+          # タグ (vX.Y.Z) なら v を外したバージョン、手動実行時は 0.0.0-dev。
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="0.0.0-dev"
+          fi
           STAGE="ghmux-${GITHUB_REF_NAME}-macos-arm64"
-          mkdir -p "dist/${STAGE}/bin"
-          cp "${BIN}/ghmux" "dist/${STAGE}/bin/ghmux"
-          # リソース root (配下に ghostty/ と terminfo/)。bin/ の隣に同梱する。
-          # 実行時に Bundle.main.bundlePath/../ghostty-resources として発見され、
-          # Ghostty.App が GHOSTTY_RESOURCES_DIR / TERMINFO を setenv する配置。
+          APP="dist/stage/ghmux.app"
+
+          # .app バンドルを組み立てる。LaunchServices が単独起動する標準構成。
+          mkdir -p "${APP}/Contents/MacOS" "${APP}/Contents/Resources"
+          cp "${BIN}/ghmux" "${APP}/Contents/MacOS/ghmux"
+          # Info.plist の __VERSION__ を実バージョンへ置換して配置。
+          sed "s/__VERSION__/${VERSION}/g" Packaging/Info.plist > "${APP}/Contents/Info.plist"
+          # リソース root (配下に ghostty/ と terminfo/)。Contents/Resources に埋め込み、
+          # Ghostty.App が Bundle.main.resourcePath/ghostty-resources として発見する。
           if [ -d Vendored/ghostty-resources ]; then
-            cp -R Vendored/ghostty-resources "dist/${STAGE}/ghostty-resources"
+            cp -R Vendored/ghostty-resources "${APP}/Contents/Resources/ghostty-resources"
           else
             echo "ghostty-resources 未生成 — terminfo 同梱をスキップ (pane 内端末が degrade する)"
           fi
-          tar -czf "dist/${STAGE}.tar.gz" -C dist "${STAGE}"
-          shasum -a 256 "dist/${STAGE}.tar.gz" | tee "dist/${STAGE}.tar.gz.sha256"
+
+          # ドラッグインストール体験のため /Applications シンボリックリンクを同梱。
+          ln -s /Applications dist/stage/Applications
+          hdiutil create -volname ghmux -srcfolder dist/stage -ov -format UDZO "dist/${STAGE}.dmg"
+          shasum -a 256 "dist/${STAGE}.dmg" | tee "dist/${STAGE}.dmg.sha256"
           echo "STAGE=${STAGE}" >> "$GITHUB_ENV"
 
       - name: アーティファクトをアップロード (手動実行時の検証用)
@@ -88,25 +101,26 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.STAGE }}
-          path: dist/*.tar.gz
+          path: dist/*.dmg
 
       - name: GitHub Release を作成 (タグ push 時)
         if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/*.tar.gz
+            dist/*.dmg
             dist/*.sha256
           generate_release_notes: true
           append_body: true
           body: |
             ### インストール
 
-            未署名バイナリのため、初回のみ Gatekeeper の隔離属性を解除してください:
+            1. `.dmg` を開き、`ghmux.app` を Applications へドラッグする。
+            2. 未署名のため、初回のみ Gatekeeper の隔離属性を解除する:
 
             ```sh
-            tar -xzf ghmux-<version>-macos-arm64.tar.gz
-            xattr -dr com.apple.quarantine ghmux-<version>-macos-arm64/bin/ghmux
-            ./ghmux-<version>-macos-arm64/bin/ghmux
+            xattr -dr com.apple.quarantine /Applications/ghmux.app
             ```
+
+            3. `ghmux.app` を起動する (Launchpad / `open -a ghmux`)。
           fail_on_unmatched_files: true

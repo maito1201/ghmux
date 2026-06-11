@@ -66,6 +66,7 @@ struct GhosttyAppResourceTests {
         defer { try? fm.removeItem(at: base) }
 
         let resolved = Ghostty.App.resolvedResourcesRoot(
+            resourcePath: "/nonexistent/Resources",
             bundlePath: base.path + "/bin",
             currentDirectory: "/nonexistent",
             systemGhosttyResources: "/nonexistent/ghostty"
@@ -73,11 +74,26 @@ struct GhosttyAppResourceTests {
         #expect(resolved == base.path + "/bin/../ghostty-resources")
     }
 
+    @Test func prefersAppBundleResourcePath() throws {
+        // .app の Contents/Resources/ghostty-resources を最優先で解決する。
+        let base = try makeBase(["Contents/Resources/ghostty-resources/ghostty"])
+        defer { try? fm.removeItem(at: base) }
+
+        let resolved = Ghostty.App.resolvedResourcesRoot(
+            resourcePath: base.path + "/Contents/Resources",
+            bundlePath: "/nonexistent.app",
+            currentDirectory: "/nonexistent",
+            systemGhosttyResources: "/nonexistent/ghostty"
+        )
+        #expect(resolved == base.path + "/Contents/Resources/ghostty-resources")
+    }
+
     @Test func fallsBackToCurrentDirectory() throws {
         let base = try makeBase(["Vendored/ghostty-resources/ghostty"])
         defer { try? fm.removeItem(at: base) }
 
         let resolved = Ghostty.App.resolvedResourcesRoot(
+            resourcePath: "/nonexistent/Resources",
             bundlePath: "/nonexistent/bin",
             currentDirectory: base.path,
             systemGhosttyResources: "/nonexistent/ghostty"
@@ -91,6 +107,7 @@ struct GhosttyAppResourceTests {
         defer { try? fm.removeItem(at: base) }
 
         let resolved = Ghostty.App.resolvedResourcesRoot(
+            resourcePath: "/nonexistent/Resources",
             bundlePath: "/nonexistent/bin",
             currentDirectory: "/nonexistent",
             systemGhosttyResources: base.path + "/ghostty"
@@ -100,6 +117,7 @@ struct GhosttyAppResourceTests {
 
     @Test func returnsNilWhenNothingExists() {
         let resolved = Ghostty.App.resolvedResourcesRoot(
+            resourcePath: "/nonexistent/Resources",
             bundlePath: "/nonexistent/bin",
             currentDirectory: "/nonexistent",
             systemGhosttyResources: "/nonexistent/ghostty"

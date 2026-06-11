@@ -146,11 +146,34 @@ extension Ghostty {
             if getenv("TERM") == nil {
                 setenv("TERM", "xterm-ghostty", 1)
             }
+
+            // .app バンドルでは実体が Contents/MacOS に埋もれ PATH に乗らないため、
+            // pane 内の `ghmux pane new` (子ペイン生成の IPC クライアント) が解決できない。
+            // 実行バイナリのディレクトリを PATH 先頭へ加える。
+            if let dir = Self.executableDirectory() {
+                prependToPath(dir)
+            }
+        }
+
+        /// 実行バイナリのあるディレクトリ (.app では Contents/MacOS)。
+        private static func executableDirectory() -> String? {
+            guard let exe = Bundle.main.executablePath else { return nil }
+            return (exe as NSString).deletingLastPathComponent
+        }
+
+        /// `dir` が PATH に未登録なら先頭へ prepend する。
+        private static func prependToPath(_ dir: String) {
+            let current = getenv("PATH").flatMap { String(cString: $0) } ?? ""
+            let entries = current.split(separator: ":").map(String.init)
+            guard !entries.contains(dir) else { return }
+            let updated = current.isEmpty ? dir : "\(dir):\(current)"
+            setenv("PATH", updated, 1)
         }
 
         /// 同梱リソース root (配下に `ghostty/` と `terminfo/` を持つ) を解決する。
         /// テスト容易化のため探索ロジックを純関数に分離する。
         static func resolvedResourcesRoot(
+            resourcePath: String = Bundle.main.resourcePath ?? Bundle.main.bundlePath,
             bundlePath: String = Bundle.main.bundlePath,
             currentDirectory: String = FileManager.default.currentDirectoryPath,
             systemGhosttyResources: String = "/Applications/Ghostty.app/Contents/Resources/ghostty",
@@ -161,8 +184,9 @@ extension Ghostty {
                 return fileManager.fileExists(atPath: path, isDirectory: &isDir) && isDir.boolValue
             }
 
-            // 1. 配布バイナリ隣接 / 2. 開発時のソースツリー。
+            // 1. .app の Contents/Resources / 2. 配布バイナリ隣接 / 3. 開発時のソースツリー。
             let candidates = [
+                resourcePath + "/ghostty-resources",
                 bundlePath + "/../ghostty-resources",
                 currentDirectory + "/Vendored/ghostty-resources",
             ]
@@ -170,7 +194,7 @@ extension Ghostty {
                 return path
             }
 
-            // 3. システムにインストール済みの Ghostty.app をフォールバックに使う。
+            // 4. システムにインストール済みの Ghostty.app をフォールバックに使う。
             //    systemGhosttyResources は <root>/ghostty を指すため、その親を root とする。
             if isDirectory(systemGhosttyResources) {
                 return (systemGhosttyResources as NSString).deletingLastPathComponent
