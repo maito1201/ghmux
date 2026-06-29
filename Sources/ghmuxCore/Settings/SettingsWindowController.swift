@@ -26,6 +26,7 @@ public final class SettingsWindowController: NSWindowController {
 final class SettingsViewController: NSViewController {
 
     private let initialPromptView = SettingsViewController.makeTextView(height: 200)
+    private let prInitialPromptView = SettingsViewController.makeTextView(height: 160)
     private let agentCommandField = NSTextField()
     private let intervalField = NSTextField()
     private let ciFailedView = SettingsViewController.makeTextView(height: 130)
@@ -47,9 +48,14 @@ final class SettingsViewController: NSViewController {
         stack.edgeInsets = NSEdgeInsets(top: 16, left: 16, bottom: 16, right: 16)
 
         stack.addArrangedSubview(section(
-            title: "初回プロンプト",
+            title: "初回プロンプト (Issue)",
             help: "Issue URL を貼ったときエージェントへ渡す。プレースホルダ: {issue_url} {number} {title} {body}",
             field: initialPromptView.scroll))
+
+        stack.addArrangedSubview(section(
+            title: "初回プロンプト (PR)",
+            help: "PR URL を貼ったときエージェントへ渡す。プレースホルダ: {pr_url} {number} {title} {body}",
+            field: prInitialPromptView.scroll))
 
         stack.addArrangedSubview(agentCommandSection())
 
@@ -213,6 +219,7 @@ final class SettingsViewController: NSViewController {
 
     private func populate(from config: GhmuxConfig) {
         initialPromptView.text.string = config.initialPrompt
+        prInitialPromptView.text.string = config.prInitialPrompt
         agentCommandField.stringValue = config.agentCommand
         intervalField.stringValue = String(config.pollIntervalSeconds)
         ciFailedView.text.string = config.autoPrompts.ciFailed
@@ -229,6 +236,7 @@ final class SettingsViewController: NSViewController {
         let cmd = agentCommandField.stringValue.trimmingCharacters(in: .whitespaces)
         return GhmuxConfig(
             initialPrompt: initialPromptView.text.string,
+            prInitialPrompt: prInitialPromptView.text.string,
             agentCommand: cmd.isEmpty ? GhmuxConfig.default.agentCommand : cmd,
             pollIntervalSeconds: max(1, interval),
             autoPrompts: .init(

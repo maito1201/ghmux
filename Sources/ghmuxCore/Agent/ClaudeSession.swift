@@ -40,6 +40,23 @@ public final class ClaudeSession {
         submit()
     }
 
+    /// PR を起点にエージェントを起動する。`agentCommand` の `{prompt}` を
+    /// シェルエスケープ済みの初回プロンプトに置換してシェルへ送る。
+    /// - promptTemplate: {pr_url} {number} {title} {body} を含むプロンプト雛形。
+    /// - agentCommand: 起動コマンド雛形 (例: `claude {prompt}` / `codex {prompt}`)。
+    public func start(
+        pullRequest pr: GitHub.PullRequest,
+        promptTemplate: String = GhmuxConfig.default.prInitialPrompt,
+        agentCommand: String = GhmuxConfig.default.agentCommand
+    ) {
+        guard !started else { return }
+        started = true
+        let prompt = ClaudePromptBuilder.initialPrompt(for: pr, template: promptTemplate)
+        let command = ClaudePromptBuilder.agentCommand(agentCommand, prompt: prompt)
+        sink(command)
+        submit()
+    }
+
     /// 実行中の claude にフォローアッププロンプトを送る (自動プロンプト等)。
     /// claude の対話入力に流し込む想定なので、本文を送って Enter で確定する。
     public func send(prompt: String) {
@@ -59,6 +76,17 @@ public enum ClaudePromptBuilder {
             "number": String(issue.number),
             "title": issue.title,
             "body": issue.body,
+        ])
+    }
+
+    /// テンプレートと PR から初回プロンプトを組み立てる。
+    /// プレースホルダ: {pr_url} {number} {title} {body}
+    public static func initialPrompt(for pr: GitHub.PullRequest, template: String) -> String {
+        AutoPromptRules.render(template, [
+            "pr_url": pr.url.absoluteString,
+            "number": String(pr.number),
+            "title": pr.title,
+            "body": pr.body ?? "",
         ])
     }
 

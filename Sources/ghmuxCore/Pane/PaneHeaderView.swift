@@ -179,7 +179,7 @@ final class PaneHeaderView: NSView, NSTextFieldDelegate {
         wantsLayer = true
         layer?.backgroundColor = NSColor(white: 0.13, alpha: 1).cgColor
 
-        issueField.placeholderString = "Paste a GitHub Issue URL and press Return"
+        issueField.placeholderString = "Paste a GitHub Issue or PR URL and press Return"
         issueField.font = NSFont.systemFont(ofSize: 12)
         issueField.bezelStyle = .roundedBezel
         issueField.delegate = self
@@ -291,6 +291,14 @@ final class PaneHeaderView: NSView, NSTextFieldDelegate {
 
     func showIssueError(_ message: String) {
         issueTitleLabel.setLink("⚠️ \(message)", url: nil)
+        issueBadge.stringValue = ""
+        issueBadge.toolTip = nil
+    }
+
+    /// PR を直接投入したときのヘッドライン (上部のタイトル行に PR をリンク表示)。
+    /// 紐づく Issue が無いので Issue バッジは消す。CI/状態は下の PR 行 (updatePR) が担う。
+    func showPRHeadline(title: String, number: Int, url: URL) {
+        issueTitleLabel.setLink("#\(number) \(title)", url: url)
         issueBadge.stringValue = ""
         issueBadge.toolTip = nil
     }

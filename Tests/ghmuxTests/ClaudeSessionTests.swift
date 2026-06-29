@@ -17,6 +17,21 @@ struct ClaudeSessionTests {
         )
     }
 
+    private func makePR(title: String = "Fix login", body: String? = "Refactor auth.") -> GitHub.PullRequest {
+        GitHub.PullRequest(
+            number: 100,
+            title: title,
+            url: URL(string: "https://github.com/acme/widgets/pull/100")!,
+            state: .open,
+            isDraft: false,
+            headRefName: "fix",
+            baseRefName: "main",
+            mergeable: .mergeable,
+            statusCheckRollup: nil,
+            body: body
+        )
+    }
+
     @Test func startSendsClaudeCommandOnce() {
         var sent: [String] = []
         var submits = 0
@@ -88,5 +103,47 @@ struct ClaudeSessionTests {
             template: "#{number} {title} :: {body} @ {issue_url}"
         )
         #expect(prompt == "#42 T :: B @ https://github.com/acme/widgets/issues/42")
+    }
+
+    // MARK: - PR 起点
+
+    @Test func startWithPullRequestSendsCommandOnce() {
+        var sent: [String] = []
+        var submits = 0
+        let session = ClaudeSession(sink: { sent.append($0) }, submit: { submits += 1 })
+        session.start(pullRequest: makePR())
+        session.start(pullRequest: makePR()) // 2 回目は無視
+        #expect(sent.count == 1)
+        #expect(submits == 1)
+        #expect(sent[0].hasPrefix("claude '"))
+        #expect(sent[0].contains("pull/100"))
+        #expect(session.started)
+    }
+
+    @Test func prInitialPromptUsesPlaceholders() {
+        let prompt = ClaudePromptBuilder.initialPrompt(
+            for: makePR(title: "T", body: "B"),
+            template: "#{number} {title} :: {body} @ {pr_url}"
+        )
+        #expect(prompt == "#100 T :: B @ https://github.com/acme/widgets/pull/100")
+    }
+
+    @Test func prInitialPromptHandlesNilBody() {
+        let prompt = ClaudePromptBuilder.initialPrompt(
+            for: makePR(title: "T", body: nil),
+            template: "{title}::{body}"
+        )
+        #expect(prompt == "T::")
+    }
+
+    @Test func defaultPrPromptMentionsCIMaintenance() {
+        let prompt = ClaudePromptBuilder.initialPrompt(
+            for: makePR(title: "T", body: "B"),
+            template: GhmuxConfig.default.prInitialPrompt
+        )
+        #expect(prompt.contains("pull/100"))
+        #expect(prompt.contains("CI"))
+        #expect(prompt.contains("T"))
+        #expect(prompt.contains("B"))
     }
 }

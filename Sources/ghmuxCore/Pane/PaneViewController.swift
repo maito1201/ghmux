@@ -120,12 +120,21 @@ final class PaneViewController: NSViewController {
     }
 
     private func handleIssueSubmission(_ urlString: String) {
-        guard let url = URL(string: urlString),
-              let parsed = try? GitHubClient.parseIssueUrl(url) else {
-            header.showIssueError("Issue URL を解釈できません")
+        guard let url = URL(string: urlString) else {
+            header.showIssueError("URL を解釈できません")
             return
         }
+        // Issue / PR のどちらの URL かで処理を分ける。
+        if let parsed = try? GitHubClient.parseIssueUrl(url) {
+            handleIssue(url: url, parsed: parsed)
+        } else if (try? GitHubClient.parsePRUrl(url)) != nil {
+            handlePullRequest(url: url)
+        } else {
+            header.showIssueError("Issue / PR URL を解釈できません")
+        }
+    }
 
+    private func handleIssue(url: URL, parsed: (owner: String, repo: String, number: Int)) {
         Task { @MainActor in
             do {
                 let issue = try await client.fetchIssue(url: url)
@@ -153,6 +162,38 @@ final class PaneViewController: NSViewController {
                 startPRDiscovery(owner: parsed.owner, repo: parsed.repo, issueNumber: parsed.number)
             } catch {
                 header.showIssueError("Issue 取得に失敗: \(error)")
+            }
+        }
+    }
+
+    /// PR URL を直接投入したときの処理。Issue を介さず、投入された PR を起点に
+    /// claude を起動し、その PR を `PullRequestWatcher` で監視する (CI 失敗時等の
+    /// 自動プロンプトは Issue 経由の PR と共通フロー)。
+    private func handlePullRequest(url: URL) {
+        Task { @MainActor in
+            do {
+                let pr = try await client.fetchPullRequest(url: url)
+                // 上部に PR タイトルを表示しつつ、下に PR 行 (CI/状態) も出す。
+                header.showPRHeadline(title: pr.title, number: pr.number, url: pr.url)
+                header.updatePR(url: pr.url, number: pr.number, state: pr.state,
+                                ci: GitHub.CIStatus.roll(pr.statusCheckRollup ?? []))
+
+                let session = ClaudeSession(
+                    sink: { [weak self] text in self?.terminalHost.sendToTerminal(text) },
+                    submit: { [weak self] in self?.terminalHost.submitLine() }
+                )
+                self.session = session
+                session.start(
+                    pullRequest: pr,
+                    promptTemplate: config.prInitialPrompt,
+                    agentCommand: config.agentCommand
+                )
+
+                // 投入された PR を直接監視する (Issue 経由と同じ watcher / 自動プロンプト)。
+                prWatchTasks[url]?.cancel()
+                prWatchTasks[url] = makePRWatchTask(prURL: url)
+            } catch {
+                header.showIssueError("PR 取得に失敗: \(error)")
             }
         }
     }

@@ -11,6 +11,10 @@ public struct GhmuxConfig: Codable, Equatable, Sendable {
     /// 使えるプレースホルダ: `{issue_url}` `{number}` `{title}` `{body}`
     public var initialPrompt: String
 
+    /// PR URL を貼ったときにエージェントへ渡す初回プロンプトのテンプレート。
+    /// 使えるプレースホルダ: `{pr_url}` `{number}` `{title}` `{body}`
+    public var prInitialPrompt: String
+
     /// エージェントを起動するシェルコマンドのテンプレート。
     /// `{prompt}` が初回プロンプト (シェルエスケープ済み) に置換される。
     /// 例: `claude {prompt}` / `codex {prompt}` / `codex exec {prompt}`
@@ -89,6 +93,7 @@ public struct GhmuxConfig: Codable, Equatable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case initialPrompt = "initial_prompt"
+        case prInitialPrompt = "pr_initial_prompt"
         case agentCommand = "agent_command"
         case pollIntervalSeconds = "poll_interval_seconds"
         case autoPrompts = "auto_prompts"
@@ -101,6 +106,7 @@ public struct GhmuxConfig: Codable, Equatable, Sendable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let def = GhmuxConfig.default
         self.initialPrompt = (try c.decodeIfPresent(String.self, forKey: .initialPrompt)) ?? def.initialPrompt
+        self.prInitialPrompt = (try c.decodeIfPresent(String.self, forKey: .prInitialPrompt)) ?? def.prInitialPrompt
         self.agentCommand = (try c.decodeIfPresent(String.self, forKey: .agentCommand)) ?? def.agentCommand
         self.pollIntervalSeconds = (try c.decodeIfPresent(Int.self, forKey: .pollIntervalSeconds)) ?? def.pollIntervalSeconds
         self.autoPrompts = (try c.decodeIfPresent(AutoPrompts.self, forKey: .autoPrompts)) ?? def.autoPrompts
@@ -109,12 +115,14 @@ public struct GhmuxConfig: Codable, Equatable, Sendable {
 
     public init(
         initialPrompt: String,
+        prInitialPrompt: String,
         agentCommand: String,
         pollIntervalSeconds: Int,
         autoPrompts: AutoPrompts,
         issues: IssuesConfig
     ) {
         self.initialPrompt = initialPrompt
+        self.prInitialPrompt = prInitialPrompt
         self.agentCommand = agentCommand
         self.pollIntervalSeconds = pollIntervalSeconds
         self.autoPrompts = autoPrompts
@@ -126,6 +134,14 @@ public struct GhmuxConfig: Codable, Equatable, Sendable {
     public static let `default` = GhmuxConfig(
         initialPrompt: """
             GitHub Issue {issue_url} に取り組んでください。実装が完了したら、この Issue を closes するプルリクエストを作成してください。
+
+            # {title}
+
+            {body}
+            """,
+        prInitialPrompt: """
+            GitHub PR {pr_url} の内容と目的を把握してください。
+            変更の意図を理解した上で、CI が PASS するまで継続的にメンテナンス（CI 失敗の修正やレビュー指摘への対応）してください。
 
             # {title}
 
@@ -208,6 +224,17 @@ public struct GhmuxConfig: Codable, Equatable, Sendable {
         # (末尾の \\ は改行を含めないための TOML 記法)
         initial_prompt = \"\"\"
         GitHub Issue {issue_url} に取り組んでください。実装が完了したら、この Issue を closes するプルリクエストを作成してください。
+
+        # {title}
+
+        {body}\\
+        \"\"\"
+
+        # PR の URL を貼ったときにエージェントへ渡す初回プロンプト。
+        # 使えるプレースホルダ: {pr_url} {number} {title} {body}
+        pr_initial_prompt = \"\"\"
+        GitHub PR {pr_url} の内容と目的を把握してください。
+        変更の意図を理解した上で、CI が PASS するまで継続的にメンテナンス（CI 失敗の修正やレビュー指摘への対応）してください。
 
         # {title}
 

@@ -36,6 +36,17 @@ struct GhmuxConfigTests {
         #expect(config.autoPrompts == GhmuxConfig.default.autoPrompts)
     }
 
+    @Test func parsesPrInitialPrompt() throws {
+        let toml = #"pr_initial_prompt = "PR を見て {pr_url}""#
+        let config = try GhmuxConfig.parse(toml)
+        #expect(config.prInitialPrompt == "PR を見て {pr_url}")
+    }
+
+    @Test func missingPrInitialPromptFallsBackToDefault() throws {
+        let config = try GhmuxConfig.parse(#"initial_prompt = "x""#)
+        #expect(config.prInitialPrompt == GhmuxConfig.default.prInitialPrompt)
+    }
+
     @Test func parsesIssuesRepositories() throws {
         let toml = """
             [issues]
@@ -90,6 +101,7 @@ struct GhmuxConfigTests {
     @Test func saveThenParseRoundTrips() throws {
         let custom = GhmuxConfig(
             initialPrompt: "実装して: {issue_url}\n\n{title}\n{body}",
+            prInitialPrompt: "PR 見て: {pr_url}\n\n{title}\n{body}",
             agentCommand: "codex exec {prompt}",
             pollIntervalSeconds: 42,
             autoPrompts: .init(
