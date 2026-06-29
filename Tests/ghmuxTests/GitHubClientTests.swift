@@ -62,6 +62,28 @@ struct GitHubClientTests {
         #expect(pr.statusCheckRollup?.count == 2)
     }
 
+    @Test func fetchAssignedOpenIssuesDecodesListAndQueriesAssignee() async throws {
+        let data = try fixtureData("issues-list")
+        let runner = MockRunner(fixture: data)
+        let client = GitHubClient(runner: runner)
+
+        let issues = try await client.fetchAssignedOpenIssues(repo: "acme/widgets")
+        #expect(issues.count == 2)
+        #expect(issues[0].number == 42)
+        #expect(issues[1].title == "Fix flaky login test")
+
+        let calls = runner.capturedArguments()
+        #expect(calls.count == 1)
+        #expect(calls[0].first == "issue")
+        #expect(calls[0].contains("list"))
+        #expect(calls[0].contains("--repo"))
+        #expect(calls[0].contains("acme/widgets"))
+        #expect(calls[0].contains("--assignee"))
+        #expect(calls[0].contains("@me"))
+        #expect(calls[0].contains("--state"))
+        #expect(calls[0].contains("open"))
+    }
+
     @Test func fetchReviewsHitsApiEndpoint() async throws {
         let data = try fixtureData("reviews")
         let runner = MockRunner(fixture: data)

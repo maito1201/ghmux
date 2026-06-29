@@ -21,7 +21,7 @@ final class MainWindowController: NSWindowController {
         window.isRestorable = false
 
         let workspace = WorkspaceViewController()
-        window.contentViewController = workspace
+        window.contentViewController = RootViewController(workspace: workspace)
 
         self.init(window: window)
         self.workspace = workspace

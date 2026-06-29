@@ -36,6 +36,24 @@ struct GhmuxConfigTests {
         #expect(config.autoPrompts == GhmuxConfig.default.autoPrompts)
     }
 
+    @Test func parsesIssuesRepositories() throws {
+        let toml = """
+            [issues]
+            repositories = [
+              "acme/widgets",
+              "acme/api",
+            ]
+            """
+        let config = try GhmuxConfig.parse(toml)
+        #expect(config.issues.repositories == ["acme/widgets", "acme/api"])
+    }
+
+    @Test func missingIssuesSectionDefaultsToEmpty() throws {
+        let config = try GhmuxConfig.parse(#"initial_prompt = "custom""#)
+        #expect(config.issues.repositories.isEmpty)
+        #expect(config.issues == GhmuxConfig.default.issues)
+    }
+
     @Test func emptyConfigIsAllDefault() throws {
         let config = try GhmuxConfig.parse("")
         #expect(config == GhmuxConfig.default)
@@ -80,7 +98,8 @@ struct GhmuxConfigTests {
                 changesRequested: "fix {reviewer}",
                 commented: "comment {body}",
                 mergeConflict: "conflict"
-            )
+            ),
+            issues: .init(repositories: ["acme/widgets", "acme/api"])
         )
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("ghmux-save-\(UUID().uuidString)")

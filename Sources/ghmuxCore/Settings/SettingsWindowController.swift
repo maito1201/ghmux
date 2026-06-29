@@ -33,6 +33,7 @@ final class SettingsViewController: NSViewController {
     private let changesRequestedView = SettingsViewController.makeTextView(height: 130)
     private let commentedView = SettingsViewController.makeTextView(height: 130)
     private let mergeConflictView = SettingsViewController.makeTextView(height: 100)
+    private let issuesReposView = SettingsViewController.makeTextView(height: 120)
 
     override func loadView() {
         let root = NSView()
@@ -53,6 +54,11 @@ final class SettingsViewController: NSViewController {
         stack.addArrangedSubview(agentCommandSection())
 
         stack.addArrangedSubview(intervalSection())
+
+        stack.addArrangedSubview(section(
+            title: "Issue 一覧サイドバーのリポジトリ",
+            help: "1 行に 1 つ \"owner/repo\" 形式。自分にアサインされた Open Issue を左端に一覧表示する。空ならサイドバー非表示。変更は次回起動時に反映。",
+            field: issuesReposView.scroll))
 
         stack.addArrangedSubview(section(
             title: "CI 失敗時の自動プロンプト",
@@ -214,6 +220,7 @@ final class SettingsViewController: NSViewController {
         changesRequestedView.text.string = config.autoPrompts.changesRequested
         commentedView.text.string = config.autoPrompts.commented
         mergeConflictView.text.string = config.autoPrompts.mergeConflict
+        issuesReposView.text.string = config.issues.repositories.joined(separator: "\n")
     }
 
     private func buildConfig() -> GhmuxConfig {
@@ -230,8 +237,17 @@ final class SettingsViewController: NSViewController {
                 changesRequested: changesRequestedView.text.string,
                 commented: commentedView.text.string,
                 mergeConflict: mergeConflictView.text.string
-            )
+            ),
+            // 1 行 1 リポジトリ。空行・前後空白は除去する。
+            issues: .init(repositories: parseRepositories(issuesReposView.text.string))
         )
+    }
+
+    /// 改行区切りのテキストを "owner/repo" のリストに変換する (空行除去・trim)。
+    private func parseRepositories(_ text: String) -> [String] {
+        text.split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
     }
 
     // MARK: - アクション

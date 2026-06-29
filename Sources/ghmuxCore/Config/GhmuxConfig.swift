@@ -22,6 +22,29 @@ public struct GhmuxConfig: Codable, Equatable, Sendable {
     /// PR 状態変化時の自動プロンプト。
     public var autoPrompts: AutoPrompts
 
+    /// Issue 一覧サイドバーの設定。
+    public var issues: IssuesConfig
+
+    public struct IssuesConfig: Codable, Equatable, Sendable {
+        /// アサイン済み Open Issue を表示するリポジトリ ("owner/repo" 形式)。
+        /// 空ならサイドバーを表示しない。
+        public var repositories: [String]
+
+        enum CodingKeys: String, CodingKey {
+            case repositories
+        }
+
+        public init(repositories: [String]) {
+            self.repositories = repositories
+        }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            let def = GhmuxConfig.default.issues
+            self.repositories = (try c.decodeIfPresent([String].self, forKey: .repositories)) ?? def.repositories
+        }
+    }
+
     public struct AutoPrompts: Codable, Equatable, Sendable {
         public var ciFailed: String
         public var ciPassed: String
@@ -69,6 +92,7 @@ public struct GhmuxConfig: Codable, Equatable, Sendable {
         case agentCommand = "agent_command"
         case pollIntervalSeconds = "poll_interval_seconds"
         case autoPrompts = "auto_prompts"
+        case issues
     }
 
     // MARK: - デコード (欠落キーはデフォルト補完)
@@ -80,18 +104,21 @@ public struct GhmuxConfig: Codable, Equatable, Sendable {
         self.agentCommand = (try c.decodeIfPresent(String.self, forKey: .agentCommand)) ?? def.agentCommand
         self.pollIntervalSeconds = (try c.decodeIfPresent(Int.self, forKey: .pollIntervalSeconds)) ?? def.pollIntervalSeconds
         self.autoPrompts = (try c.decodeIfPresent(AutoPrompts.self, forKey: .autoPrompts)) ?? def.autoPrompts
+        self.issues = (try c.decodeIfPresent(IssuesConfig.self, forKey: .issues)) ?? def.issues
     }
 
     public init(
         initialPrompt: String,
         agentCommand: String,
         pollIntervalSeconds: Int,
-        autoPrompts: AutoPrompts
+        autoPrompts: AutoPrompts,
+        issues: IssuesConfig
     ) {
         self.initialPrompt = initialPrompt
         self.agentCommand = agentCommand
         self.pollIntervalSeconds = pollIntervalSeconds
         self.autoPrompts = autoPrompts
+        self.issues = issues
     }
 
     // MARK: - デフォルト
@@ -112,7 +139,8 @@ public struct GhmuxConfig: Codable, Equatable, Sendable {
             changesRequested: "PR {url} に @{reviewer} から修正リクエストが付きました。\n\n{body}\n\nコメントを取り込んで修正をお願いします。",
             commented: "PR {url} に @{reviewer} からコメントが付きました。\n\n{body}\n\n対応が必要なら修正してください。",
             mergeConflict: "PR {url} がベースブランチとコンフリクトしました。解消してください。"
-        )
+        ),
+        issues: IssuesConfig(repositories: [])
     )
 
     // MARK: - ロード
@@ -203,5 +231,12 @@ public struct GhmuxConfig: Codable, Equatable, Sendable {
         changes_requested = "PR {url} に @{reviewer} から修正リクエストが付きました。\\n\\n{body}\\n\\nコメントを取り込んで修正をお願いします。"
         commented = "PR {url} に @{reviewer} からコメントが付きました。\\n\\n{body}\\n\\n対応が必要なら修正してください。"
         merge_conflict = "PR {url} がベースブランチとコンフリクトしました。解消してください。"
+
+        # Issue 一覧サイドバーに表示するリポジトリ ("owner/repo" 形式)。
+        # 自分にアサインされた Open Issue が画面左端に一覧表示される。空ならサイドバー非表示。
+        [issues]
+        repositories = [
+        #   "owner/repo1",
+        ]
         """
 }

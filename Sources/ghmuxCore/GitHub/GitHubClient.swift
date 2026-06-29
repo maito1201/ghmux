@@ -44,6 +44,18 @@ public actor GitHubClient {
         return try decode(GitHub.Issue.self, from: data)
     }
 
+    /// 指定リポジトリ ("owner/repo") で自分にアサインされた Open Issue を取得。
+    /// Issue 一覧サイドバー向け。`fetchIssue` と同じフィールド・デコード経路を使う。
+    public func fetchAssignedOpenIssues(repo: String) async throws -> [GitHub.Issue] {
+        let fields = "number,title,body,url,state,author,labels"
+        let data = try await runner.run(arguments: [
+            "issue", "list", "--repo", repo,
+            "--assignee", "@me", "--state", "open",
+            "--json", fields,
+        ])
+        return try decode([GitHub.Issue].self, from: data)
+    }
+
     /// PR URL から PR 詳細を取得 (CI ロールアップ含む)。
     public func fetchPullRequest(url: URL) async throws -> GitHub.PullRequest {
         let data = try await runner.run(arguments: [
@@ -233,14 +245,35 @@ public struct ProcessRunner: GitHubClient.Runner {
         proc.standardError = stderr
 
         return try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Data, Swift.Error>) in
+            // stdout/stderr を別スレッドで「プロセス実行中に並行して」読み切る。
+            // terminationHandler 後にまとめて読む方式だと、出力がパイプバッファ(約64KB)を
+            // 超えたとき gh が書き込みでブロックして終了できず、永久に待つ (デッドロック) ため。
+            // Issue 一覧など出力が大きいケースで顕在化する。
+            let readQueue = DispatchQueue(label: "ghmux.gh.read", attributes: .concurrent)
+            let group = DispatchGroup()
+            var outData = Data()
+            var errData = Data()
+
+            group.enter()
+            readQueue.async {
+                outData = (try? stdout.fileHandleForReading.readToEnd()) ?? Data()
+                group.leave()
+            }
+            group.enter()
+            readQueue.async {
+                errData = (try? stderr.fileHandleForReading.readToEnd()) ?? Data()
+                group.leave()
+            }
+
             proc.terminationHandler = { p in
-                let out = (try? stdout.fileHandleForReading.readToEnd()) ?? Data()
-                let err = String(data: (try? stderr.fileHandleForReading.readToEnd()) ?? Data(), encoding: .utf8) ?? ""
+                // プロセス終了で write 端が閉じ readToEnd が EOF を返すので、読み切りを待つ。
+                group.wait()
                 if p.terminationStatus != 0 {
+                    let err = String(data: errData, encoding: .utf8) ?? ""
                     cont.resume(throwing: GitHubClient.Error.ghFailed(
                         exitCode: p.terminationStatus, stderr: err))
                 } else {
-                    cont.resume(returning: out)
+                    cont.resume(returning: outData)
                 }
             }
             do {

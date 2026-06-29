@@ -1,0 +1,22 @@
+[
+  {
+    "number": 42,
+    "title": "Add dark mode",
+    "body": "We need a dark mode for the dashboard.",
+    "url": "https://github.com/acme/widgets/issues/42",
+    "state": "OPEN",
+    "author": { "login": "alice" },
+    "labels": [
+      { "name": "enhancement", "color": "a2eeef" }
+    ]
+  },
+  {
+    "number": 57,
+    "title": "Fix flaky login test",
+    "body": "The login test fails intermittently on CI.",
+    "url": "https://github.com/acme/widgets/issues/57",
+    "state": "OPEN",
+    "author": { "login": "bob" },
+    "labels": []
+  }
+]
