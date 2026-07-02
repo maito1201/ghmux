@@ -87,6 +87,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         appMenuItem.submenu = appMenu
 
+        // Edit メニュー: コピー/ペースト等の標準編集。
+        // これが無いと Cmd+C/V/X/A がファーストレスポンダ (設定画面のテキスト欄) へ
+        // 配送されない。項目は target=nil で responder chain 経由にし、
+        // 編集対象 (NSTextView/NSTextField) が cut:/copy:/paste:/selectAll: を処理する。
+        // ターミナルペイン (Ghostty surface) はこれらに応答しないため項目は自動で無効化され、
+        // Cmd+C 等はそのまま keyDown → ghostty へ透過する (端末側のコピー挙動は不変)。
+        let editMenuItem = NSMenuItem()
+        mainMenu.addItem(editMenuItem)
+        let editMenu = NSMenu(title: "編集")
+        editMenu.addItem(withTitle: "取り消す", action: Selector(("undo:")), keyEquivalent: "z")
+        let redo = editMenu.addItem(withTitle: "やり直す", action: Selector(("redo:")), keyEquivalent: "z")
+        redo.keyEquivalentModifierMask = [.command, .shift]
+        editMenu.addItem(NSMenuItem.separator())
+        editMenu.addItem(withTitle: "カット", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: "コピー", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: "ペースト", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: "すべてを選択", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        editMenuItem.submenu = editMenu
+
         // Pane メニュー: 分割 / クローズ / フォーカス移動。
         // target=nil でファーストレスポンダ経由 → WorkspaceViewController が処理する。
         let paneMenuItem = NSMenuItem()
