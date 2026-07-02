@@ -68,6 +68,39 @@ extension Ghostty {
             if let config { ghostty_config_free(config) }
         }
 
+        // MARK: - 非アクティブペインのディム設定
+
+        // ghostty 本家 (macos/Sources/Ghostty/Ghostty.Config.swift) と同じ方式で、
+        // ロード済みの ghostty config から「非アクティブ split を暗くする」パラメータを読む。
+        // ghmux 独自 config を増やさず、ユーザーの ~/.config/ghostty/config を尊重する。
+
+        /// 非アクティブペインに重ねるディム矩形の不透明度。
+        /// config の `unfocused-split-opacity` (1=無効) の逆数。取得不可時は 0.3 相当。
+        public var unfocusedSplitOverlayAlpha: Double {
+            guard let config else { return 0.3 }
+            var opacity: Double = 0.7
+            let key = "unfocused-split-opacity"
+            _ = ghostty_config_get(config, &opacity, key, UInt(key.lengthOfBytes(using: .utf8)))
+            return 1 - opacity
+        }
+
+        /// ディム矩形の塗り色。config の `unfocused-split-fill`、無ければ `background` にフォールバック。
+        public var unfocusedSplitFill: NSColor {
+            guard let config else { return .black }
+            var color = ghostty_config_color_s()
+            let key = "unfocused-split-fill"
+            if !ghostty_config_get(config, &color, key, UInt(key.lengthOfBytes(using: .utf8))) {
+                let bgKey = "background"
+                _ = ghostty_config_get(config, &color, bgKey, UInt(bgKey.lengthOfBytes(using: .utf8)))
+            }
+            return NSColor(
+                red: CGFloat(color.r) / 255,
+                green: CGFloat(color.g) / 255,
+                blue: CGFloat(color.b) / 255,
+                alpha: 1
+            )
+        }
+
         /// libghostty にイベントループの 1 tick を処理させる。
         func tick() {
             guard let app else { return }

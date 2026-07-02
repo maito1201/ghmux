@@ -15,6 +15,10 @@ extension Ghostty {
         /// keyDown 中に interpretKeyEvents が IME 経由で確定したテキストを溜めるバッファ。
         private var keyTextAccumulator: [String]?
 
+        /// フォーカス取得/喪失を上位へ通知する (非アクティブペインのディム表示に使う)。
+        /// become/resign で firstResponder が切り替わった後に呼ばれる。
+        var onFocusChange: ((Bool) -> Void)?
+
         /// 現在の論理サイズ (point)。backing 変換に使う。
         private var contentSize: CGSize = .zero
 
@@ -105,13 +109,19 @@ extension Ghostty {
 
         public override func becomeFirstResponder() -> Bool {
             let result = super.becomeFirstResponder()
-            if result, let surface { ghostty_surface_set_focus(surface, true) }
+            if result {
+                if let surface { ghostty_surface_set_focus(surface, true) }
+                onFocusChange?(true)
+            }
             return result
         }
 
         public override func resignFirstResponder() -> Bool {
             let result = super.resignFirstResponder()
-            if result, let surface { ghostty_surface_set_focus(surface, false) }
+            if result {
+                if let surface { ghostty_surface_set_focus(surface, false) }
+                onFocusChange?(false)
+            }
             return result
         }
 

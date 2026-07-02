@@ -73,7 +73,25 @@ final class WorkspaceViewController: NSViewController {
             guard let self, let p else { return false }
             return self.movePane(draggedId, ontoEdgeOf: p.paneId, edge: edge)
         }
+        // フォーカスが移ったら全ペインのディム状態を再計算する (マウスクリック含む)。
+        p.onFocusChange = { [weak self] _ in self?.scheduleDimRefresh() }
         return p
+    }
+
+    // MARK: - 非アクティブペインのディム
+
+    /// フォーカス遷移中は firstResponder が一瞬 nil / window になり得るため、
+    /// 状態が確定する次の runloop で再計算する。
+    private func scheduleDimRefresh() {
+        DispatchQueue.main.async { [weak self] in self?.refreshPaneDimming() }
+    }
+
+    /// 各ペインのディムを更新する。複数ペインのとき、アクティブ以外を暗くする。
+    private func refreshPaneDimming() {
+        let panes = collectPanes()
+        let split = panes.count > 1
+        let active = activePane()
+        for p in panes { p.setDimmed(split && p !== active) }
     }
 
     // MARK: - ツリー走査
@@ -117,6 +135,8 @@ final class WorkspaceViewController: NSViewController {
 
         let content = buildView(root)
         setRootView(content)
+        // 分割/移動/クローズでペイン数やアクティブが変わるので、ディムを追従させる。
+        scheduleDimRefresh()
     }
 
     private func buildView(_ node: SplitNode) -> NSView {

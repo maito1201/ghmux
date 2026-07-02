@@ -23,6 +23,9 @@ final class PaneViewController: NSViewController {
     var onRequestSplitDown: (() -> Void)?
     var onRequestBeginDrag: ((NSEvent) -> Void)?
 
+    /// このペインの端末がフォーカスを取得/喪失したときに呼ばれる (Workspace がディム再計算に使う)。
+    var onFocusChange: ((Bool) -> Void)?
+
     /// このペインの一意な ID。CLI (`ghmux pane new`) が `GHMUX_PANE` で参照し、
     /// どのペインを分割元にするか GUI へ伝えるのに使う。
     let paneId: String
@@ -91,6 +94,7 @@ final class PaneViewController: NSViewController {
         header.onSplitRight = { [weak self] in self?.onRequestSplitRight?() }
         header.onSplitDown = { [weak self] in self?.onRequestSplitDown?() }
         header.onBeginPaneDrag = { [weak self] event in self?.onRequestBeginDrag?(event) }
+        terminalHost.onFocusChange = { [weak self] focused in self?.onFocusChange?(focused) }
         dropOverlay.paneId = paneId
         view = root
     }
@@ -104,6 +108,11 @@ final class PaneViewController: NSViewController {
     /// 端末をキーボードフォーカスにする (分割直後・フォーカス移動時に呼ぶ)。
     func focusTerminal() {
         terminalHost.focusTerminal()
+    }
+
+    /// このペインを暗くする/戻す (非アクティブペインのディム表示)。
+    func setDimmed(_ dimmed: Bool) {
+        terminalHost.setDimmed(dimmed)
     }
 
     /// 端末の現在の作業ディレクトリ (分割時に新ペインへ引き継ぐ)。

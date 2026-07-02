@@ -65,6 +65,12 @@ public enum Ghostty {
         public let configuration: Configuration
         private var surfaceView: SurfaceView?
 
+        /// フォーカス取得/喪失の通知 (非アクティブペインのディム表示に使う)。
+        /// makeView の前後どちらで設定しても、生成済みの surfaceView へ反映される。
+        public var onFocusChange: ((Bool) -> Void)? {
+            didSet { surfaceView?.onFocusChange = onFocusChange }
+        }
+
         public init(configuration: Configuration = Configuration()) {
             self.configuration = configuration
         }
@@ -73,6 +79,7 @@ public enum Ghostty {
         public func makeView() -> NSView {
             if let surfaceView { return surfaceView }
             let view = SurfaceView(configuration: configuration)
+            view.onFocusChange = onFocusChange
             surfaceView = view
             return view
         }
