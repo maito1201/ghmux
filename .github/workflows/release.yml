@@ -82,6 +82,9 @@ jobs:
           cp "${BIN}/ghmux" "${APP}/Contents/MacOS/ghmux"
           # Info.plist の __VERSION__ を実バージョンへ置換して配置。
           sed "s/__VERSION__/${VERSION}/g" Packaging/Info.plist > "${APP}/Contents/Info.plist"
+          # アプリアイコン。元 PNG から .icns を生成し Contents/Resources に同梱する
+          # (Info.plist の CFBundleIconFile=AppIcon が Resources/AppIcon.icns を参照)。
+          ./scripts/make-icns.sh Packaging/AppIcon.png "${APP}/Contents/Resources/AppIcon.icns"
           # リソース root (配下に ghostty/ と terminfo/)。Contents/Resources に埋め込み、
           # Ghostty.App が Bundle.main.resourcePath/ghostty-resources として発見する。
           if [ -d Vendored/ghostty-resources ]; then
