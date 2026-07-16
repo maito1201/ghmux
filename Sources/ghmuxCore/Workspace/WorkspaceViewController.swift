@@ -35,13 +35,26 @@ final class WorkspaceViewController: NSViewController {
     /// 進行中のペインドラッグの元 ID (オーバーレイ表示の除外用)。
     private var draggingPaneId: String?
 
+    /// 最初のペインを起動する作業ディレクトリ (ワークスペース生成元から引き継ぐ)。
+    let creationDirectory: String?
+    /// ユーザーが付けた表示名 (未設定ならディレクトリ名から導出する)。
+    var customName: String?
+
+    init(workingDirectory: String? = nil) {
+        self.creationDirectory = workingDirectory
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("Use init(workingDirectory:)") }
+
     override func loadView() {
         let v = NSView()
         v.wantsLayer = true
         v.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
         view = v
 
-        let p = makePane()
+        let p = makePane(workingDirectory: creationDirectory)
         root = .leaf(p)
         rebuild()
     }
@@ -49,6 +62,17 @@ final class WorkspaceViewController: NSViewController {
     override func viewDidAppear() {
         super.viewDidAppear()
         collectPanes().first?.focusTerminal()
+    }
+
+    /// アクティブ (無ければ先頭) ペインへフォーカスする。
+    /// ワークスペース切替でこの view が再表示されたとき、呼び出し側から明示的に使う。
+    func focusActivePane() {
+        (activePane() ?? collectPanes().first)?.focusTerminal()
+    }
+
+    /// アクティブ (無ければ先頭) ペインの現在の作業ディレクトリ (表示名の導出用)。
+    func activeDirectory() -> String? {
+        (activePane() ?? collectPanes().first)?.currentDirectory()
     }
 
     // MARK: - 生成
@@ -117,6 +141,11 @@ final class WorkspaceViewController: NSViewController {
     /// 指定 ID のペインを探す (IPC/CLI の origin 解決用)。
     private func pane(withId id: String) -> PaneViewController? {
         collectPanes().first { $0.paneId == id }
+    }
+
+    /// このワークスペースが指定 ID のペインを含むか (IPC のワークスペース振り分け用)。
+    func contains(paneId id: String) -> Bool {
+        pane(withId: id) != nil
     }
 
     // MARK: - 階層の再構築

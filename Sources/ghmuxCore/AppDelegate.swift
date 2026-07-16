@@ -33,9 +33,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// main スレッドで IPC リクエストを処理する。
     private func handleIPC(_ request: IPC.Request) -> IPC.Response {
-        guard let workspace = mainWindowController?.workspace else {
+        guard let mainWindowController else {
             return .failure("ワークスペースがありません")
         }
+        // origin ペインを含むワークスペースへ振り分ける。見つからなければ選択中へ。
+        let workspace = request.origin.flatMap { mainWindowController.workspace(containingPaneId: $0) }
+            ?? mainWindowController.activeWorkspace
         switch request.command {
         case .paneNew:
             guard let paneId = workspace.openPaneAssigningIssue(
@@ -147,6 +150,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         prevPane.keyEquivalentModifierMask = [.command]
 
         paneMenuItem.submenu = paneMenu
+
+        // Workspace メニュー: 追加 / クローズ / 切替 / ジャンプ。
+        // target=nil でファーストレスポンダ経由 → RootViewController が処理する。
+        // ペイン系 (⌘] / ⌘[ / ⌘W) と衝突しない修飾キーにする。
+        let workspaceMenuItem = NSMenuItem()
+        mainMenu.addItem(workspaceMenuItem)
+        let workspaceMenu = NSMenu(title: "Workspace")
+
+        let newWorkspace = workspaceMenu.addItem(
+            withTitle: "New Workspace",
+            action: Selector(("newWorkspace:")),
+            keyEquivalent: "n")
+        newWorkspace.keyEquivalentModifierMask = [.command]
+
+        let closeWorkspace = workspaceMenu.addItem(
+            withTitle: "Close Workspace",
+            action: Selector(("closeWorkspace:")),
+            keyEquivalent: "w")
+        closeWorkspace.keyEquivalentModifierMask = [.command, .shift]
+
+        workspaceMenu.addItem(NSMenuItem.separator())
+
+        let nextWorkspace = workspaceMenu.addItem(
+            withTitle: "Next Workspace",
+            action: Selector(("selectNextWorkspace:")),
+            keyEquivalent: "]")
+        nextWorkspace.keyEquivalentModifierMask = [.control, .command]
+
+        let prevWorkspace = workspaceMenu.addItem(
+            withTitle: "Previous Workspace",
+            action: Selector(("selectPreviousWorkspace:")),
+            keyEquivalent: "[")
+        prevWorkspace.keyEquivalentModifierMask = [.control, .command]
+
+        workspaceMenu.addItem(NSMenuItem.separator())
+
+        // ⌘1..⌘8 = 1..8 番目、⌘9 = 末尾。tag に番号を入れて 1 セレクタで処理する。
+        for n in 1...9 {
+            let item = workspaceMenu.addItem(
+                withTitle: n == 9 ? "Go to Last Workspace" : "Go to Workspace \(n)",
+                action: Selector(("jumpToWorkspace:")),
+                keyEquivalent: "\(n)")
+            item.keyEquivalentModifierMask = [.command]
+            item.tag = n
+        }
+
+        workspaceMenuItem.submenu = workspaceMenu
 
         NSApp.mainMenu = mainMenu
     }

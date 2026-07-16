@@ -2,8 +2,16 @@ import AppKit
 
 final class MainWindowController: NSWindowController {
 
-    /// このウィンドウのワークスペース。IPC ハンドラからペイン操作を呼ぶために公開する。
-    private(set) var workspace: WorkspaceViewController!
+    /// このウィンドウのルート VC。ワークスペース群を保持する。
+    private(set) var rootViewController: RootViewController!
+
+    /// 現在選択中のワークスペース (IPC のフォールバック先)。
+    var activeWorkspace: WorkspaceViewController { rootViewController.activeWorkspace }
+
+    /// 指定 ID のペインを含むワークスペース (`ghmux pane new` の振り分け用)。
+    func workspace(containingPaneId id: String) -> WorkspaceViewController? {
+        rootViewController.workspace(containingPaneId: id)
+    }
 
     convenience init() {
         let window = NSWindow(
@@ -20,11 +28,11 @@ final class MainWindowController: NSWindowController {
         // (これが効いていると contentRect 指定が上書きされてサイズが変わらない)。
         window.isRestorable = false
 
-        let workspace = WorkspaceViewController()
-        window.contentViewController = RootViewController(workspace: workspace)
+        let root = RootViewController()
+        window.contentViewController = root
 
         self.init(window: window)
-        self.workspace = workspace
+        self.rootViewController = root
         // フレーム自動保存も無効。
         self.shouldCascadeWindows = false
         self.windowFrameAutosaveName = ""

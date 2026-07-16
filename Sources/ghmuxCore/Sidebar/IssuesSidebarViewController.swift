@@ -13,14 +13,17 @@ final class IssuesSidebarViewController: NSViewController {
         override var isFlipped: Bool { true }
     }
 
-    private static let expandedWidth: CGFloat = 280
-    private static let collapsedWidth: CGFloat = 32
+    static let expandedWidth: CGFloat = 280
+    static let collapsedWidth: CGFloat = 32
 
     private let repositories: [String]
     private let client = GitHubClient()
 
     private(set) var isCollapsed = false
-    private var widthConstraint: NSLayoutConstraint!
+
+    /// 折りたたみトグルが押されたときに通知する (引数 = 折りたたみ後の状態)。
+    /// 左カラム幅は RootViewController が所有するため、幅アニメーションは呼び出し側で行う。
+    var onToggleCollapse: ((Bool) -> Void)?
 
     private let titleLabel = NSTextField(labelWithString: "Issues")
     private let refreshButton = NSButton()
@@ -50,9 +53,8 @@ final class IssuesSidebarViewController: NSViewController {
         root.appearance = NSAppearance(named: .darkAqua)
         view = root
 
-        widthConstraint = root.widthAnchor.constraint(equalToConstant: Self.expandedWidth)
-        widthConstraint.isActive = true
-
+        // 左カラムの幅は RootViewController が所有するため、ここでは幅制約を持たない
+        // (縦分割ビュー内では幅はコンテナが決める)。
         configureHeader()
         configureList()
 
@@ -169,12 +171,8 @@ final class IssuesSidebarViewController: NSViewController {
         refreshButton.isHidden = collapsed
         scrollView.isHidden = collapsed
 
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.18
-            ctx.allowsImplicitAnimation = true
-            widthConstraint.animator().constant = collapsed ? Self.collapsedWidth : Self.expandedWidth
-            view.layoutSubtreeIfNeeded()
-        }
+        // 左カラム全体の幅アニメーションは所有者 (RootViewController) に委ねる。
+        onToggleCollapse?(collapsed)
     }
 
     // MARK: - フェッチ
