@@ -1,0 +1,5 @@
+{
+  "name": "ghmux",
+  "description": "起動中の ghmux (macOS ターミナル多重化 GUI) をコマンドラインから操作する。ペイン/ワークスペースの作成・一覧・内容確認・クローズ、GitHub Issue/PR の割り当てを行う。",
+  "version": "0.1.0"
+}

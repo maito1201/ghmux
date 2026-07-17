@@ -1,8 +1,8 @@
 # ghmux
 
 GitHub の Issue / PR と Claude Code を 1 画面に統合する macOS ターミナル。
-
-> ⚠️ Phase 0 実装中。詳細は [`CONCEPT.md`](./CONCEPT.md) と [`実装プラン`](#) を参照。
+ターミナル上部にGitHubのIssue、またはPRのURLをペーストするとClaudeが立ち上がる。
+PRのCI Fail, PASSなどの状況に応じて自動でプロンプトを入力させることが可能。
 
 ## 動作要件
 
@@ -28,6 +28,20 @@ GitHub の Issue / PR と Claude Code を 1 画面に統合する macOS ター�
 > これはマルウェアではなく未署名アプリに対する macOS の標準動作。
 
 
+## Claude Code スキルとして使う
+
+起動中の ghmux GUI を Claude Code から操作するスキルを、プラグインとして配布している。
+Claude Code 内で以下を実行するとインストールできる。
+
+```sh
+/plugin marketplace add maito1201/ghmux
+/plugin install ghmux@ghmux
+```
+
+導入後、Claude が `ghmux` のペイン/ワークスペース操作（作成・一覧・内容確認・クローズ、Issue/PR 割り当て）を
+CLI 経由で扱えるようになる。スキル本体は [`skills/ghmux/SKILL.md`](./skills/ghmux/SKILL.md)。
+
+
 ## 開発
 
 ```sh
@@ -47,5 +61,6 @@ ghmux/
 ├── Tests/ghmuxTests/        # 単体テスト
 ├── vendor/ghostty/         # Ghostty (git submodule)
 ├── scripts/                # ビルド / lint
-└── CONCEPT.md              # 設計コンセプト
+├── skills/ghmux/           # Claude Code スキル (SKILL.md)
+└── .claude-plugin/         # プラグイン / marketplace マニフェスト
 ```

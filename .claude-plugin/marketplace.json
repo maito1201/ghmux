@@ -1,0 +1,13 @@
+{
+  "name": "ghmux",
+  "owner": {
+    "name": "maito1201"
+  },
+  "plugins": [
+    {
+      "name": "ghmux",
+      "source": "./",
+      "description": "起動中の ghmux GUI をコマンドラインから操作する Claude Code スキル"
+    }
+  ]
+}
