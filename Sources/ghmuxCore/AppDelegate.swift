@@ -81,6 +81,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // --lines 指定時は末尾 N 行だけ返す (Claude のコンテキスト消費を抑える)。
             return .success(payload: Self.tail(text, lines: request.lines))
 
+        case .paneSend:
+            // 誤実行を避けるため対象は明示 pane_id 必須 (由来ペインへの暗黙フォールバックはしない)。
+            guard let paneId = request.paneId else {
+                return .failure("ペイン ID が指定されていません")
+            }
+            guard let text = request.text else {
+                return .failure("送信する文字列が指定されていません")
+            }
+            guard let workspace = mainWindowController.workspace(containingPaneId: paneId) else {
+                return .failure("ペインが見つかりません: \(paneId)")
+            }
+            workspace.sendToPane(paneId: paneId, text: text, submit: request.submit ?? true)
+            return .success(payload: paneId)
+
         case .paneClose:
             // 明示指定 → 由来ペイン の順で対象を決める。
             let targetId = request.paneId ?? request.origin

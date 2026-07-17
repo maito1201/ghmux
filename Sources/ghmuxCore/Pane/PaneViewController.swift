@@ -136,6 +136,13 @@ final class PaneViewController: NSViewController {
         terminalHost.readText(fullScreen: fullScreen)
     }
 
+    /// 外部 (`ghmux pane send`) からこのペインの端末へ文字列を送る。
+    /// `submit` が true なら Enter を送って実行確定する (bracketed paste 対策)。
+    func sendText(_ text: String, submit: Bool) {
+        terminalHost.sendToTerminal(text)
+        if submit { terminalHost.submitLine() }
+    }
+
     // MARK: - Issue 投入
 
     /// 外部 (IPC / CLI 経由など) からこのペインへ Issue をアサインする。

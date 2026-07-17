@@ -294,6 +294,14 @@ final class WorkspaceViewController: NSViewController {
         pane(withId: paneId)?.readTerminalText(fullScreen: fullScreen)
     }
 
+    /// 指定 ID のペインへ文字列を送る (`ghmux pane send` 用)。見つからなければ false。
+    @discardableResult
+    func sendToPane(paneId: String, text: String, submit: Bool) -> Bool {
+        guard let pane = pane(withId: paneId) else { return false }
+        pane.sendText(text, submit: submit)
+        return true
+    }
+
     /// 指定 ID のペインを閉じる (`ghmux pane close` 用)。
     /// 最後の 1 枚 or ID 不在なら false (`closePane(_:)` と同じく最後のペインは残す)。
     @discardableResult

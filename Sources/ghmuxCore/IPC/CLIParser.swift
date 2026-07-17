@@ -41,6 +41,7 @@ public enum CLIParser {
       ghmux pane new [--issue <URL>] [--direction right|down] [--cwd <path>]
       ghmux pane list
       ghmux pane view <pane_id> [--viewport] [--lines <N>]
+      ghmux pane send <pane_id> <command> [--no-enter]
       ghmux pane close [<pane_id>]
       ghmux workspace new
       ghmux workspace close [<workspace_id>]
@@ -85,6 +86,8 @@ public enum CLIParser {
             return IPC.Request(command: .paneList)
         case "view":
             return try parsePaneView(rest)
+        case "send":
+            return try parsePaneSend(rest)
         case "close":
             let paneId = try optionalPositional(rest, context: "pane close")
             return IPC.Request(command: .paneClose, paneId: paneId)
@@ -149,6 +152,46 @@ public enum CLIParser {
 
         guard let paneId else { throw Error.missingArgument("<pane_id>") }
         return IPC.Request(command: .paneView, paneId: paneId, viewScope: scope, lines: lines)
+    }
+
+    private static func parsePaneSend(_ args: [String]) throws -> IPC.Request {
+        var paneId: String?
+        var command: String?
+        var submit = true
+        // `--` 以降はフラグ解釈を止め、`--foo` で始まるコマンドも位置引数として受け取れるようにする。
+        var endOfOptions = false
+
+        var i = 0
+        while i < args.count {
+            let arg = args[i]
+            if !endOfOptions {
+                switch arg {
+                case "--":
+                    endOfOptions = true
+                    i += 1
+                    continue
+                case "--no-enter":
+                    submit = false
+                    i += 1
+                    continue
+                default:
+                    if arg.hasPrefix("--") { throw Error.unknownFlag(arg) }
+                }
+            }
+            // 位置引数: 1 個目 = pane_id、2 個目 = command。
+            if paneId == nil {
+                paneId = arg
+            } else if command == nil {
+                command = arg
+            } else {
+                throw Error.unexpectedArgument(arg)
+            }
+            i += 1
+        }
+
+        guard let paneId else { throw Error.missingArgument("<pane_id>") }
+        guard let command else { throw Error.missingArgument("<command>") }
+        return IPC.Request(command: .paneSend, paneId: paneId, text: command, submit: submit)
     }
 
     // MARK: - workspace サブコマンド

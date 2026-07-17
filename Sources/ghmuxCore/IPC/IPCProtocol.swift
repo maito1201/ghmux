@@ -34,6 +34,8 @@ public enum IPC {
         case paneView = "pane.view"
         /// 指定 (or 由来) ペインを閉じる。
         case paneClose = "pane.close"
+        /// 指定ペインへ文字列を送る (任意で Enter 実行)。
+        case paneSend = "pane.send"
         /// 新しいワークスペースを作成する。
         case workspaceNew = "workspace.new"
         /// 指定 (or 由来/選択中) ワークスペースを閉じる。
@@ -75,6 +77,10 @@ public enum IPC {
         public var viewScope: ViewScope?
         /// `pane view` で末尾 N 行だけ返す (tail 相当)。省略時は全行。
         public var lines: Int?
+        /// `pane send` で送る文字列 (コマンド/指示)。
+        public var text: String?
+        /// `pane send` で送出後に Enter で実行確定するか。nil は true 相当 (既定で実行)。
+        public var submit: Bool?
 
         public init(
             command: Command,
@@ -86,6 +92,8 @@ public enum IPC {
             workspaceId: String? = nil,
             viewScope: ViewScope? = nil,
             lines: Int? = nil,
+            text: String? = nil,
+            submit: Bool? = nil,
             v: Int = IPC.version
         ) {
             self.v = v
@@ -98,6 +106,8 @@ public enum IPC {
             self.workspaceId = workspaceId
             self.viewScope = viewScope
             self.lines = lines
+            self.text = text
+            self.submit = submit
         }
     }
 

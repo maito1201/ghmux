@@ -105,6 +105,25 @@ ghmux pane view <pane_id> --viewport       # 可視範囲だけ
 ghmux pane view <pane_id>                   # 全スクロールバック (大きくなり得る)
 ```
 
+### `ghmux pane send <pane_id> <command> [--no-enter]`
+
+指定ペインの端末へ文字列を送ります。**別ペインで unix コマンドを実行する**、あるいは**そのペインで動いている claude へ指示を投入する**のに使います。
+
+- `<pane_id>`: 送信先（**明示必須**。誤実行を避けるため由来ペインへの暗黙フォールバックはしません）。`pane list` で取得します。
+- `<command>`: 送る文字列。`pane view` と同じ単一位置引数なので、スペースを含む場合は**クォート必須**（例 `"npm test"`）。
+- 既定は**貼り付け＋Enter で実行確定**します。`--no-enter` を付けると入力欄に置くだけで実行しません。
+- 先頭が `--` のコマンドを送るときは `--`（end-of-options）の後ろに置きます: `ghmux pane send <id> -- --version`。
+- 送信先で claude が動いている場合、この送信は**プロンプト投入**として扱われます。
+- **出力**: 送信先 `<pane_id>`（成功時）。ペインが見つからなければ stderr にエラー、終了コード 1。
+
+```sh
+ghmux pane send <pane_id> "npm test"           # 別ペインでコマンド実行
+ghmux pane send <pane_id> "このテストを直して"    # claude ペインへ指示を投入
+ghmux pane send <pane_id> "git status" --no-enter  # 入力欄に置くだけ (未実行)
+```
+
+> ⚠️ 既定で実行まで行うため、`<pane_id>` を取り違えると意図しないペインでコマンドが走ります。送信前に `pane list` で対象を確認してください。
+
 ### `ghmux pane close [<pane_id>]`
 
 ペインを閉じます。
@@ -149,6 +168,13 @@ ghmux pane list                                   # 全体像と ID を取得
 ghmux pane view <pane_id> --lines 200              # 特定ペインの直近を確認 (範囲を絞る)
 ghmux pane list | jq '.workspaces[].panes[]
   | select(.pullRequests[]?.ci == "failure")'      # CI 失敗中のペインを抽出
+```
+
+**別ペインへ作業を指示する**（`pane list` で対象を確認してから送る）:
+
+```sh
+ghmux pane send <pane_id> "npm test"               # 別ペインでコマンド実行
+ghmux pane send <pane_id> "CI が失敗しているので直して"   # claude ペインへ指示
 ```
 
 **後始末**:

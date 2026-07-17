@@ -109,6 +109,54 @@ struct CLIParserTests {
         }
     }
 
+    // MARK: - pane send
+
+    @Test func paneSend() throws {
+        let req = try CLIParser.parse(["ghmux", "pane", "send", "PANE-1", "npm test"])
+        #expect(req?.command == .paneSend)
+        #expect(req?.paneId == "PANE-1")
+        #expect(req?.text == "npm test")
+        #expect(req?.submit == true) // 既定は Enter 実行
+    }
+
+    @Test func paneSendNoEnter() throws {
+        let req = try CLIParser.parse(["ghmux", "pane", "send", "PANE-1", "date", "--no-enter"])
+        #expect(req?.text == "date")
+        #expect(req?.submit == false)
+    }
+
+    @Test func paneSendMissingPaneIdThrows() {
+        #expect(throws: (any Error).self) {
+            try CLIParser.parse(["ghmux", "pane", "send"])
+        }
+    }
+
+    @Test func paneSendMissingCommandThrows() {
+        #expect(throws: (any Error).self) {
+            try CLIParser.parse(["ghmux", "pane", "send", "PANE-1"])
+        }
+    }
+
+    @Test func paneSendEndOfOptionsAllowsDashDashCommand() throws {
+        // `--` 以降は先頭が -- のコマンドも位置引数として送れる。
+        let req = try CLIParser.parse(["ghmux", "pane", "send", "PANE-1", "--", "--version"])
+        #expect(req?.paneId == "PANE-1")
+        #expect(req?.text == "--version")
+        #expect(req?.submit == true)
+    }
+
+    @Test func paneSendRejectsExtraPositional() {
+        #expect(throws: (any Error).self) {
+            try CLIParser.parse(["ghmux", "pane", "send", "PANE-1", "cmd", "extra"])
+        }
+    }
+
+    @Test func paneSendUnknownFlagThrows() {
+        #expect(throws: CLIParser.Error.unknownFlag("--frob")) {
+            try CLIParser.parse(["ghmux", "pane", "send", "PANE-1", "cmd", "--frob"])
+        }
+    }
+
     @Test func paneCloseWithoutId() throws {
         let req = try CLIParser.parse(["ghmux", "pane", "close"])
         #expect(req?.command == .paneClose)
