@@ -73,6 +73,8 @@ public enum IPC {
         public var workspaceId: String?
         /// `pane view` の読み取り範囲。省略時は screen。
         public var viewScope: ViewScope?
+        /// `pane view` で末尾 N 行だけ返す (tail 相当)。省略時は全行。
+        public var lines: Int?
 
         public init(
             command: Command,
@@ -83,6 +85,7 @@ public enum IPC {
             paneId: String? = nil,
             workspaceId: String? = nil,
             viewScope: ViewScope? = nil,
+            lines: Int? = nil,
             v: Int = IPC.version
         ) {
             self.v = v
@@ -94,6 +97,7 @@ public enum IPC {
             self.paneId = paneId
             self.workspaceId = workspaceId
             self.viewScope = viewScope
+            self.lines = lines
         }
     }
 

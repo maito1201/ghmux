@@ -11,6 +11,7 @@ public enum CLIParser {
         case unknownFlag(String)
         case missingValue(flag: String)
         case invalidDirection(String)
+        case invalidLines(String)
         case missingArgument(String)
         case unexpectedArgument(String)
 
@@ -24,6 +25,8 @@ public enum CLIParser {
                 return "\(flag) に値がありません"
             case .invalidDirection(let s):
                 return "--direction は right|down のいずれか (指定: \(s))"
+            case .invalidLines(let s):
+                return "--lines は 1 以上の整数 (指定: \(s))"
             case .missingArgument(let what):
                 return "\(what) が必要です"
             case .unexpectedArgument(let s):
@@ -37,7 +40,7 @@ public enum CLIParser {
     usage:
       ghmux pane new [--issue <URL>] [--direction right|down] [--cwd <path>]
       ghmux pane list
-      ghmux pane view <pane_id> [--viewport]
+      ghmux pane view <pane_id> [--viewport] [--lines <N>]
       ghmux pane close [<pane_id>]
       ghmux workspace new
       ghmux workspace close [<workspace_id>]
@@ -124,6 +127,7 @@ public enum CLIParser {
     private static func parsePaneView(_ args: [String]) throws -> IPC.Request {
         var paneId: String?
         var scope: IPC.ViewScope = .screen
+        var lines: Int?
 
         var i = 0
         while i < args.count {
@@ -131,6 +135,10 @@ public enum CLIParser {
             switch arg {
             case "--viewport":
                 scope = .viewport
+            case "--lines":
+                let v = try value(args, after: &i, flag: arg)
+                guard let n = Int(v), n >= 1 else { throw Error.invalidLines(v) }
+                lines = n
             default:
                 if arg.hasPrefix("--") { throw Error.unknownFlag(arg) }
                 guard paneId == nil else { throw Error.unexpectedArgument(arg) }
@@ -140,7 +148,7 @@ public enum CLIParser {
         }
 
         guard let paneId else { throw Error.missingArgument("<pane_id>") }
-        return IPC.Request(command: .paneView, paneId: paneId, viewScope: scope)
+        return IPC.Request(command: .paneView, paneId: paneId, viewScope: scope, lines: lines)
     }
 
     // MARK: - workspace サブコマンド

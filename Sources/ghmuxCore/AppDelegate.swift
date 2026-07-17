@@ -78,7 +78,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let text = workspace.readPaneText(paneId: paneId, fullScreen: fullScreen) else {
                 return .failure("端末内容を取得できませんでした")
             }
-            return .success(payload: text)
+            // --lines 指定時は末尾 N 行だけ返す (Claude のコンテキスト消費を抑える)。
+            return .success(payload: Self.tail(text, lines: request.lines))
 
         case .paneClose:
             // 明示指定 → 由来ペイン の順で対象を決める。
@@ -113,6 +114,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             return .success(payload: target.id)
         }
+    }
+
+    /// `pane view --lines N` 用: 末尾 N 行だけを返す。`lines` が nil なら全体をそのまま返す。
+    /// 末尾の改行 1 個は行数に数えず、あれば保持する。
+    static func tail(_ text: String, lines: Int?) -> String {
+        guard let lines, lines >= 1 else { return text }
+        var body = text
+        let hadTrailingNewline = body.hasSuffix("\n")
+        if hadTrailingNewline { body.removeLast() }
+        let all = body.split(separator: "\n", omittingEmptySubsequences: false)
+        guard all.count > lines else { return text }
+        let tailed = all.suffix(lines).joined(separator: "\n")
+        return hadTrailingNewline ? tailed + "\n" : tailed
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

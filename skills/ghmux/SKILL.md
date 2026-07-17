@@ -86,17 +86,23 @@ ghmux pane new --issue https://github.com/owner/repo/issues/42 --direction down
 - `issue`/`pullRequests` の状態は非同期に取得・監視されるため、割り当て直後は反映まで数秒かかることがあります。
 - `jq` での加工が可能です（例: `ghmux pane list | jq -r '.workspaces[].panes[].paneId'`）。
 
-### `ghmux pane view <pane_id> [--viewport]`
+### `ghmux pane view <pane_id> [--viewport] [--lines <N>]`
 
 指定ペインの端末内容をテキストで出力します。ペインで何が起きたかを確認するのに使います。
 
 - 既定: **スクロールバック全体**（画面外の履歴も含む）。
 - `--viewport`: 現在表示中の範囲のみ。
+- `--lines <N>`: 末尾 N 行だけ返す（tail 相当。`--viewport` とも併用可）。
 - **出力**: 端末テキストを stdout へそのまま。ペインが見つからなければ stderr にエラー、終了コード 1。
 
+> ⚠️ **コンテキスト消費に注意**: 既定のスクロールバック全体は、長時間動いた端末だと数万行・数十万トークンに達し得ます。
+> Claude が読む場合は、まず `--viewport`（可視範囲）か `--lines <N>`（例 `--lines 200`）で**必要な範囲に絞って**取得し、
+> 全体が本当に必要なときだけ無指定にしてください。
+
 ```sh
-ghmux pane view <pane_id>
-ghmux pane view <pane_id> --viewport | tail -20
+ghmux pane view <pane_id> --lines 200      # 直近 200 行だけ (推奨)
+ghmux pane view <pane_id> --viewport       # 可視範囲だけ
+ghmux pane view <pane_id>                   # 全スクロールバック (大きくなり得る)
 ```
 
 ### `ghmux pane close [<pane_id>]`
@@ -140,7 +146,7 @@ ghmux pane new --issue https://github.com/owner/repo/issues/99 --direction down
 
 ```sh
 ghmux pane list                                   # 全体像と ID を取得
-ghmux pane view <pane_id>                          # 特定ペインの様子を確認
+ghmux pane view <pane_id> --lines 200              # 特定ペインの直近を確認 (範囲を絞る)
 ghmux pane list | jq '.workspaces[].panes[]
   | select(.pullRequests[]?.ci == "failure")'      # CI 失敗中のペインを抽出
 ```

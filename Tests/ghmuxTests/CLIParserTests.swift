@@ -88,6 +88,21 @@ struct CLIParserTests {
         #expect(req?.viewScope == .viewport)
     }
 
+    @Test func paneViewLines() throws {
+        let req = try CLIParser.parse(["ghmux", "pane", "view", "PANE-1", "--lines", "200"])
+        #expect(req?.paneId == "PANE-1")
+        #expect(req?.lines == 200)
+    }
+
+    @Test func paneViewInvalidLinesThrows() {
+        #expect(throws: CLIParser.Error.invalidLines("0")) {
+            try CLIParser.parse(["ghmux", "pane", "view", "PANE-1", "--lines", "0"])
+        }
+        #expect(throws: CLIParser.Error.invalidLines("abc")) {
+            try CLIParser.parse(["ghmux", "pane", "view", "PANE-1", "--lines", "abc"])
+        }
+    }
+
     @Test func paneViewMissingIdThrows() {
         #expect(throws: (any Error).self) {
             try CLIParser.parse(["ghmux", "pane", "view"])
