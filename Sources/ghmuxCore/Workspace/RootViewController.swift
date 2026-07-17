@@ -45,6 +45,33 @@ final class RootViewController: NSViewController {
         workspaces.first { $0.contains(paneId: id) }
     }
 
+    /// 指定 ID のワークスペースを返す (`ghmux workspace close` の対象指定用)。
+    func workspace(withId id: String) -> WorkspaceViewController? {
+        workspaces.first { $0.id == id }
+    }
+
+    /// 全ワークスペース/ペインのスナップショット (`ghmux pane list` 用)。
+    func workspaceSnapshots() -> [IPC.WorkspaceInfo] {
+        workspaces.enumerated().map { index, ws in
+            IPC.WorkspaceInfo(
+                id: ws.id,
+                name: displayName(for: ws),
+                selected: index == selectedIndex,
+                panes: ws.paneSnapshots())
+        }
+    }
+
+    /// 指定 ID のワークスペースを閉じる (`ghmux workspace close` 用)。
+    /// ID 不在 or 残り 1 個なら false。
+    @discardableResult
+    func closeWorkspace(withId id: String) -> Bool {
+        guard let index = workspaces.firstIndex(where: { $0.id == id }), workspaces.count > 1 else {
+            return false
+        }
+        closeWorkspace(at: index)
+        return true
+    }
+
     // MARK: - View
 
     override func loadView() {
@@ -165,12 +192,15 @@ final class RootViewController: NSViewController {
 
     /// 新規ワークスペースを末尾に追加して選択する。cmux 同様、現在のワークスペースの
     /// 作業ディレクトリを引き継いで開き、そのディレクトリ名を既定の表示名にする。
-    func addWorkspace() {
+    /// - Returns: 追加したワークスペースの ID (`ghmux workspace new` が返す)。
+    @discardableResult
+    func addWorkspace() -> String {
         let dir = activeWorkspace.activeDirectory()
         let ws = WorkspaceViewController(workingDirectory: dir)
         addChild(ws)
         workspaces.append(ws)
         selectWorkspace(at: workspaces.count - 1)
+        return ws.id
     }
 
     /// 指定位置のワークスペースの表示名を変更する (空なら既定=ディレクトリ名に戻す)。

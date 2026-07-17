@@ -77,6 +77,11 @@ final class TerminalHostView: NSView {
     func currentDirectory() -> String? {
         surface.currentDirectory()
     }
+
+    /// 端末内容をテキストで読み取る (`fullScreen`: スクロールバック全体 / それ以外: 可視範囲)。
+    func readText(fullScreen: Bool) -> String? {
+        surface.readText(fullScreen: fullScreen)
+    }
 }
 
 /// マウスイベントを一切拾わないオーバーレイ。ディム表示専用で、下の surface に操作を素通しする。

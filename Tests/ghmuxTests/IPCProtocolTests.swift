@@ -55,4 +55,73 @@ struct IPCProtocolTests {
         #expect(req.workingDirectory == nil)
         #expect(req.v == IPC.version)
     }
+
+    // MARK: - v2 拡張
+
+    @Test func versionIsTwo() {
+        #expect(IPC.version == 2)
+    }
+
+    @Test func issueURLIsOptional() throws {
+        let req = IPC.Request(command: .paneNew) // Issue 無し
+        #expect(req.issueURL == nil)
+        let decoded = try IPC.decodeRequest(try IPC.encode(req))
+        #expect(decoded == req)
+        #expect(decoded.issueURL == nil)
+    }
+
+    @Test func newCommandsRoundTrip() throws {
+        let commands: [IPC.Command] = [.paneList, .paneView, .paneClose, .workspaceNew, .workspaceClose]
+        for cmd in commands {
+            let req = IPC.Request(command: cmd)
+            #expect(try IPC.decodeRequest(IPC.encode(req)).command == cmd)
+        }
+    }
+
+    @Test func newRequestFieldsRoundTrip() throws {
+        let req = IPC.Request(
+            command: .paneView,
+            paneId: "pane-7",
+            workspaceId: "ws-3",
+            viewScope: .viewport)
+        let decoded = try IPC.decodeRequest(try IPC.encode(req))
+        #expect(decoded == req)
+        #expect(decoded.paneId == "pane-7")
+        #expect(decoded.workspaceId == "ws-3")
+        #expect(decoded.viewScope == .viewport)
+    }
+
+    @Test func responsePayloadRoundTrips() throws {
+        let resp = IPC.Response.success(payload: "hello\nworld")
+        let decoded = try IPC.decodeResponse(try IPC.encode(resp))
+        #expect(decoded.ok)
+        #expect(decoded.payload == "hello\nworld")
+        #expect(decoded.paneId == nil)
+    }
+
+    @Test func paneListPayloadRoundTrips() throws {
+        let payload = IPC.PaneListPayload(workspaces: [
+            IPC.WorkspaceInfo(id: "ws-1", name: "app", selected: true, panes: [
+                IPC.PaneInfo(
+                    paneId: "p1",
+                    workingDirectory: "/tmp",
+                    active: true,
+                    issue: IPC.IssueInfo(url: "https://x/issues/1", state: "open"),
+                    pullRequests: [
+                        IPC.PullRequestInfo(url: "https://x/pull/2", number: 2, state: "open", ci: "success"),
+                        IPC.PullRequestInfo(
+                            url: "https://x/pull/3", number: 3, state: "open",
+                            ci: "failure", failingChecks: ["build", "test"]),
+                    ]),
+                IPC.PaneInfo(paneId: "p2", workingDirectory: nil, active: false),
+            ]),
+            IPC.WorkspaceInfo(id: "ws-2", name: "docs", selected: false, panes: []),
+        ])
+        #expect(payload.paneCount == 2) // 派生カウント
+        let data = try JSONEncoder().encode(payload)
+        let decoded = try JSONDecoder().decode(IPC.PaneListPayload.self, from: data)
+        #expect(decoded == payload)
+        #expect(decoded.workspaces[0].panes[0].issue?.state == "open")
+        #expect(decoded.workspaces[0].panes[0].pullRequests[1].failingChecks == ["build", "test"])
+    }
 }

@@ -30,6 +30,17 @@ final class PaneViewController: NSViewController {
     /// どのペインを分割元にするか GUI へ伝えるのに使う。
     let paneId: String
 
+    /// 紐づく Issue の最新状態 (`ghmux pane list` 用)。fetch/監視のたびに更新する。
+    /// PR を直接投入した場合や未アサインの場合は nil。
+    private(set) var issueInfo: IPC.IssueInfo?
+    /// 紐づく PR の最新状態 (URL キー)。監視のたびに更新し、紐付けが消えたら除去する。
+    private var prInfos: [URL: IPC.PullRequestInfo] = [:]
+
+    /// `ghmux pane list` 用に、紐づく Issue と PR 群のスナップショットを返す。
+    func githubSnapshot() -> (issue: IPC.IssueInfo?, pullRequests: [IPC.PullRequestInfo]) {
+        (issueInfo, prInfos.values.sorted { $0.number < $1.number })
+    }
+
     /// `workingDirectory` を渡すと端末をそのディレクトリで起動する (分割時の cwd 引き継ぎ)。
     /// PTY には `GHMUX_PANE` (このペインの ID) と `GHMUX_SOCK` (IPC ソケットパス) を注入し、
     /// ペイン内で動く claude が `ghmux pane new` を叩けるようにする。
@@ -120,6 +131,11 @@ final class PaneViewController: NSViewController {
         terminalHost.currentDirectory()
     }
 
+    /// 端末内容をテキストで読み取る (`ghmux pane view` 用)。
+    func readTerminalText(fullScreen: Bool) -> String? {
+        terminalHost.readText(fullScreen: fullScreen)
+    }
+
     // MARK: - Issue 投入
 
     /// 外部 (IPC / CLI 経由など) からこのペインへ Issue をアサインする。
@@ -149,6 +165,7 @@ final class PaneViewController: NSViewController {
                 let issue = try await client.fetchIssue(url: url)
                 header.showIssue(title: issue.title, number: issue.number, url: issue.url)
                 header.showIssueStatus(state: issue.state)
+                self.issueInfo = IPC.IssueInfo(url: issue.url.absoluteString, state: issue.state.jsonValue)
 
                 // ClaudeSession を起動 (PTY へ claude コマンドを送る)。
                 // 本文はペーストで投入し、Enter で実行確定する (bracketed paste 対策)。
@@ -183,9 +200,10 @@ final class PaneViewController: NSViewController {
             do {
                 let pr = try await client.fetchPullRequest(url: url)
                 // 上部に PR タイトルを表示しつつ、下に PR 行 (CI/状態) も出す。
+                let ci = GitHub.CIStatus.roll(pr.statusCheckRollup ?? [])
                 header.showPRHeadline(title: pr.title, number: pr.number, url: pr.url)
-                header.updatePR(url: pr.url, number: pr.number, state: pr.state,
-                                ci: GitHub.CIStatus.roll(pr.statusCheckRollup ?? []))
+                header.updatePR(url: pr.url, number: pr.number, state: pr.state, ci: ci)
+                self.prInfos[url] = IPC.PullRequestInfo(pr: pr, ci: ci)
 
                 let session = ClaudeSession(
                     sink: { [weak self] text in self?.terminalHost.sendToTerminal(text) },
@@ -235,10 +253,11 @@ final class PaneViewController: NSViewController {
     @MainActor
     private func reconcilePRWatchers(_ urls: [URL]) {
         let current = Set(urls)
-        // 紐付けが消えた PR は監視終了 + 行削除。
+        // 紐付けが消えた PR は監視終了 + 行削除 + スナップショット除去。
         for url in prWatchTasks.keys where !current.contains(url) {
             prWatchTasks[url]?.cancel()
             prWatchTasks[url] = nil
+            prInfos[url] = nil
             header.removePR(url: url)
         }
         guard !urls.isEmpty else {
@@ -267,7 +286,10 @@ final class PaneViewController: NSViewController {
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: self.pollInterval * 1_000_000_000)
                 if let issue = try? await self.client.fetchIssue(url: url) {
-                    await MainActor.run { self.header.showIssueStatus(state: issue.state) }
+                    await MainActor.run {
+                        self.header.showIssueStatus(state: issue.state)
+                        self.issueInfo = IPC.IssueInfo(url: url.absoluteString, state: issue.state.jsonValue)
+                    }
                 }
             }
         }
@@ -285,6 +307,7 @@ final class PaneViewController: NSViewController {
                     await MainActor.run {
                         if let pr = snapshot {
                             self.header.updatePR(url: prURL, number: pr.number, state: pr.state, ci: ci)
+                            self.prInfos[prURL] = IPC.PullRequestInfo(pr: pr, ci: ci)
                         }
                         self.handleEvents(events, prURL: prURL)
                     }
@@ -325,5 +348,37 @@ final class PaneViewController: NSViewController {
         case .reviewAdded: return "review"
         case .stateChanged: return "state"
         }
+    }
+}
+
+// MARK: - GitHub ドメイン型 → IPC DTO 変換 (`ghmux pane list` 用)
+
+private extension GitHub.Issue.State {
+    /// JSON 出力用の小文字表記 ("open" / "closed")。
+    var jsonValue: String { rawValue.lowercased() }
+}
+
+private extension GitHub.PullRequest.State {
+    /// JSON 出力用の小文字表記 ("open" / "closed" / "merged")。
+    var jsonValue: String { rawValue.lowercased() }
+}
+
+private extension IPC.PullRequestInfo {
+    /// PR のスナップショットと CI ロールアップから DTO を作る。
+    init(pr: GitHub.PullRequest, ci: GitHub.CIStatus) {
+        let ciValue: String
+        let failing: [String]?
+        switch ci {
+        case .noChecks: ciValue = "none"; failing = nil
+        case .pending: ciValue = "pending"; failing = nil
+        case .success: ciValue = "success"; failing = nil
+        case .failure(let checks): ciValue = "failure"; failing = checks
+        }
+        self.init(
+            url: pr.url.absoluteString,
+            number: pr.number,
+            state: pr.state.jsonValue,
+            ci: ciValue,
+            failingChecks: failing)
     }
 }

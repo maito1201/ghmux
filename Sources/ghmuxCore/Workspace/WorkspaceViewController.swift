@@ -35,6 +35,9 @@ final class WorkspaceViewController: NSViewController {
     /// 進行中のペインドラッグの元 ID (オーバーレイ表示の除外用)。
     private var draggingPaneId: String?
 
+    /// 安定したワークスペース ID (CLI/IPC からの対象指定用)。配列 index と違い並べ替え/クローズで変わらない。
+    let id: String = UUID().uuidString
+
     /// 最初のペインを起動する作業ディレクトリ (ワークスペース生成元から引き継ぐ)。
     let creationDirectory: String?
     /// ユーザーが付けた表示名 (未設定ならディレクトリ名から導出する)。
@@ -252,22 +255,54 @@ final class WorkspaceViewController: NSViewController {
 
     // MARK: - IPC/CLI からのペイン生成
 
-    /// 由来ペインを基点に新ペインを開き、Issue をアサインする (`ghmux pane new` の実体)。
+    /// 由来ペインを基点に新ペインを開く (`ghmux pane new` の実体)。`issueURL` を指定した場合のみ Issue をアサインする。
     /// origin が見つからなければアクティブペイン、それも無ければ先頭ペインへフォールバックする。
     /// - Returns: 開いた新ペインの ID。基点ペインが存在しなければ nil。
     @discardableResult
-    func openPaneAssigningIssue(
-        issueURL: String,
+    func openPane(
         origin: String?,
         direction: IPC.Direction,
-        cwd: String?
+        cwd: String?,
+        issueURL: String?
     ) -> String? {
         let base = origin.flatMap { pane(withId: $0) } ?? activePane() ?? collectPanes().first
         guard let base else { return nil }
         let splitDirection: BinarySplitView.Direction = (direction == .down) ? .vertical : .horizontal
         guard let newPane = splitFrom(base, direction: splitDirection, cwd: cwd) else { return nil }
-        newPane.assignIssue(urlString: issueURL)
+        if let issueURL { newPane.assignIssue(urlString: issueURL) }
         return newPane.paneId
+    }
+
+    // MARK: - IPC/CLI 用スナップショット / 読み取り / クローズ
+
+    /// このワークスペース内の全ペインのスナップショット (`ghmux pane list` 用)。
+    func paneSnapshots() -> [IPC.PaneInfo] {
+        let active = activePane()
+        return collectPanes().map { pane in
+            let gh = pane.githubSnapshot()
+            return IPC.PaneInfo(
+                paneId: pane.paneId,
+                workingDirectory: pane.currentDirectory(),
+                active: pane === active,
+                issue: gh.issue,
+                pullRequests: gh.pullRequests)
+        }
+    }
+
+    /// 指定 ID のペインの端末内容を読み取る (`ghmux pane view` 用)。見つからなければ nil。
+    func readPaneText(paneId: String, fullScreen: Bool) -> String? {
+        pane(withId: paneId)?.readTerminalText(fullScreen: fullScreen)
+    }
+
+    /// 指定 ID のペインを閉じる (`ghmux pane close` 用)。
+    /// 最後の 1 枚 or ID 不在なら false (`closePane(_:)` と同じく最後のペインは残す)。
+    @discardableResult
+    func closePane(withId id: String) -> Bool {
+        guard collectPanes().count > 1, let target = pane(withId: id) else { return false }
+        root = remove(target, from: root) ?? root
+        rebuild()
+        collectPanes().first?.focusTerminal()
+        return true
     }
 
     // MARK: - ドラッグでのペイン再配置

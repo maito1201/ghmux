@@ -104,6 +104,11 @@ public enum Ghostty {
         public func currentDirectory() -> String? {
             surfaceView?.currentDirectory()
         }
+
+        /// 端末内容をテキストで読み取る (`fullScreen`: スクロールバック全体 / それ以外: 可視範囲)。
+        public func readText(fullScreen: Bool) -> String? {
+            surfaceView?.readText(fullScreen: fullScreen)
+        }
     }
 }
 

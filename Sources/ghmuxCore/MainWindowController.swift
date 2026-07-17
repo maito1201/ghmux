@@ -13,6 +13,28 @@ final class MainWindowController: NSWindowController {
         rootViewController.workspace(containingPaneId: id)
     }
 
+    /// 指定 ID のワークスペース (`ghmux workspace close` の対象指定用)。
+    func workspace(withId id: String) -> WorkspaceViewController? {
+        rootViewController.workspace(withId: id)
+    }
+
+    /// 全ワークスペース/ペインのスナップショット (`ghmux pane list` 用)。
+    func workspaceSnapshots() -> [IPC.WorkspaceInfo] {
+        rootViewController.workspaceSnapshots()
+    }
+
+    /// 新規ワークスペースを追加し、その ID を返す (`ghmux workspace new` 用)。
+    @discardableResult
+    func addWorkspace() -> String {
+        rootViewController.addWorkspace()
+    }
+
+    /// 指定 ID のワークスペースを閉じる (`ghmux workspace close` 用)。
+    @discardableResult
+    func closeWorkspace(withId id: String) -> Bool {
+        rootViewController.closeWorkspace(withId: id)
+    }
+
     convenience init() {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1500, height: 950),

@@ -36,7 +36,12 @@ public enum IPCClient {
         do {
             let response = try send(req, socketPath: socketPath)
             if response.ok {
-                if let id = response.paneId {
+                if let payload = response.payload {
+                    // JSON 文書 or 端末テキスト。デコードせずそのまま出力する (downstream の jq 等向け)。
+                    var out = payload
+                    if !out.hasSuffix("\n") { out += "\n" }
+                    FileHandle.standardOutput.write(Data(out.utf8))
+                } else if let id = response.paneId {
                     FileHandle.standardOutput.write(Data("opened pane \(id)\n".utf8))
                 }
                 return 0
@@ -73,7 +78,8 @@ public enum IPCClient {
         }
         guard written == payload.count else { throw Error.writeFailed(errnoString()) }
 
-        guard let data = IPC.readMessage(fd: fd) else { throw Error.noResponse }
+        // `pane view` のスクロールバック全体はデフォルト上限 (1MB) を超え得るので上限を上げる。
+        guard let data = IPC.readMessage(fd: fd, cap: 64 << 20) else { throw Error.noResponse }
         do {
             return try IPC.decodeResponse(data)
         } catch {

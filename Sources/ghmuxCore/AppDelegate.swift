@@ -36,20 +36,82 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let mainWindowController else {
             return .failure("ワークスペースがありません")
         }
-        // origin ペインを含むワークスペースへ振り分ける。見つからなければ選択中へ。
-        let workspace = request.origin.flatMap { mainWindowController.workspace(containingPaneId: $0) }
-            ?? mainWindowController.activeWorkspace
+        // origin (由来ペイン) から振り分け先ワークスペースを解決する。commands ごとに使い分ける。
+        func originWorkspace() -> WorkspaceViewController {
+            request.origin.flatMap { mainWindowController.workspace(containingPaneId: $0) }
+                ?? mainWindowController.activeWorkspace
+        }
+
         switch request.command {
         case .paneNew:
-            guard let paneId = workspace.openPaneAssigningIssue(
-                issueURL: request.issueURL,
+            guard let paneId = originWorkspace().openPane(
                 origin: request.origin,
                 direction: request.direction,
-                cwd: request.workingDirectory
+                cwd: request.workingDirectory,
+                issueURL: request.issueURL
             ) else {
                 return .failure("ペインを開けませんでした")
             }
             return .success(paneId: paneId)
+
+        case .paneList:
+            // グローバル: 全ワークスペース/ペインの階層を JSON で返す。
+            // 人間も読める可読性のため整形出力する (キー順固定 + URL の / を非エスケープ)。
+            let payload = IPC.PaneListPayload(workspaces: mainWindowController.workspaceSnapshots())
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+            do {
+                let json = try encoder.encode(payload)
+                return .success(payload: String(decoding: json, as: UTF8.self))
+            } catch {
+                return .failure("一覧の JSON 変換に失敗しました: \(error)")
+            }
+
+        case .paneView:
+            guard let paneId = request.paneId else {
+                return .failure("ペイン ID が指定されていません")
+            }
+            guard let workspace = mainWindowController.workspace(containingPaneId: paneId) else {
+                return .failure("ペインが見つかりません: \(paneId)")
+            }
+            let fullScreen = (request.viewScope ?? .screen) == .screen
+            guard let text = workspace.readPaneText(paneId: paneId, fullScreen: fullScreen) else {
+                return .failure("端末内容を取得できませんでした")
+            }
+            return .success(payload: text)
+
+        case .paneClose:
+            // 明示指定 → 由来ペイン の順で対象を決める。
+            let targetId = request.paneId ?? request.origin
+            let workspace = targetId.flatMap { mainWindowController.workspace(containingPaneId: $0) }
+                ?? mainWindowController.activeWorkspace
+            let resolvedId = targetId
+                ?? workspace.paneSnapshots().first(where: { $0.active })?.paneId
+            guard let resolvedId else {
+                return .failure("閉じるペインを特定できませんでした")
+            }
+            guard workspace.closePane(withId: resolvedId) else {
+                if workspace.contains(paneId: resolvedId) {
+                    return .failure("最後のペインは閉じられません (ワークスペースを閉じてください)")
+                }
+                return .failure("ペインが見つかりません: \(resolvedId)")
+            }
+            // 閉じた ID を素の文字列で返す (workspace close / new と一貫。"opened pane" 誤表示を避ける)。
+            return .success(payload: resolvedId)
+
+        case .workspaceNew:
+            // グローバル: 新規ワークスペースを作り、その ID を返す。
+            let id = mainWindowController.addWorkspace()
+            return .success(payload: id)
+
+        case .workspaceClose:
+            // 明示指定 → 由来ペインのワークスペース → 選択中 の順で対象を決める。
+            let target = request.workspaceId.flatMap { mainWindowController.workspace(withId: $0) }
+                ?? originWorkspace()
+            guard mainWindowController.closeWorkspace(withId: target.id) else {
+                return .failure("最後のワークスペースは閉じられません")
+            }
+            return .success(payload: target.id)
         }
     }
 

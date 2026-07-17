@@ -31,10 +31,12 @@ struct CLIParserTests {
         #expect(req?.workingDirectory == "/tmp/x")
     }
 
-    @Test func missingIssueThrows() {
-        #expect(throws: CLIParser.Error.missingIssue) {
-            try CLIParser.parse(["ghmux", "pane", "new"])
-        }
+    @Test func paneNewWithoutIssue() throws {
+        // Issue 無しでもペインを作成できる (issueURL は nil)。
+        let req = try CLIParser.parse(["ghmux", "pane", "new"])
+        #expect(req?.command == .paneNew)
+        #expect(req?.issueURL == nil)
+        #expect(req?.direction == .right)
     }
 
     @Test func missingFlagValueThrows() {
@@ -58,6 +60,74 @@ struct CLIParserTests {
     @Test func unknownPaneSubcommandThrows() {
         #expect(throws: (any Error).self) {
             try CLIParser.parse(["ghmux", "pane", "destroy"])
+        }
+    }
+
+    // MARK: - pane list / view / close
+
+    @Test func paneList() throws {
+        let req = try CLIParser.parse(["ghmux", "pane", "list"])
+        #expect(req?.command == .paneList)
+    }
+
+    @Test func paneListRejectsExtraArgs() {
+        #expect(throws: (any Error).self) {
+            try CLIParser.parse(["ghmux", "pane", "list", "extra"])
+        }
+    }
+
+    @Test func paneViewWithId() throws {
+        let req = try CLIParser.parse(["ghmux", "pane", "view", "PANE-1"])
+        #expect(req?.command == .paneView)
+        #expect(req?.paneId == "PANE-1")
+        #expect(req?.viewScope == .screen) // 既定はスクロールバック全体
+    }
+
+    @Test func paneViewViewport() throws {
+        let req = try CLIParser.parse(["ghmux", "pane", "view", "PANE-1", "--viewport"])
+        #expect(req?.viewScope == .viewport)
+    }
+
+    @Test func paneViewMissingIdThrows() {
+        #expect(throws: (any Error).self) {
+            try CLIParser.parse(["ghmux", "pane", "view"])
+        }
+    }
+
+    @Test func paneCloseWithoutId() throws {
+        let req = try CLIParser.parse(["ghmux", "pane", "close"])
+        #expect(req?.command == .paneClose)
+        #expect(req?.paneId == nil)
+    }
+
+    @Test func paneCloseWithId() throws {
+        let req = try CLIParser.parse(["ghmux", "pane", "close", "PANE-2"])
+        #expect(req?.command == .paneClose)
+        #expect(req?.paneId == "PANE-2")
+    }
+
+    // MARK: - workspace new / close
+
+    @Test func workspaceNew() throws {
+        let req = try CLIParser.parse(["ghmux", "workspace", "new"])
+        #expect(req?.command == .workspaceNew)
+    }
+
+    @Test func workspaceCloseWithoutId() throws {
+        let req = try CLIParser.parse(["ghmux", "workspace", "close"])
+        #expect(req?.command == .workspaceClose)
+        #expect(req?.workspaceId == nil)
+    }
+
+    @Test func workspaceCloseWithId() throws {
+        let req = try CLIParser.parse(["ghmux", "workspace", "close", "WS-1"])
+        #expect(req?.command == .workspaceClose)
+        #expect(req?.workspaceId == "WS-1")
+    }
+
+    @Test func unknownWorkspaceSubcommandThrows() {
+        #expect(throws: (any Error).self) {
+            try CLIParser.parse(["ghmux", "workspace", "destroy"])
         }
     }
 }

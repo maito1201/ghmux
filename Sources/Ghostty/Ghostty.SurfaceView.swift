@@ -158,6 +158,32 @@ extension Ghostty {
             _ = ghostty_surface_key(surface, key_ev)
         }
 
+        /// 端末の内容をテキストで読み取る (`ghmux pane view` 用)。
+        ///
+        /// `fullScreen` が true ならスクロールバックを含む画面全体、false なら現在表示中の
+        /// ビューポートのみ。参照実装と同じ選択領域を組んで `ghostty_surface_read_text` を呼ぶ。
+        /// 取得できなければ nil。
+        func readText(fullScreen: Bool) -> String? {
+            guard let surface else { return nil }
+            let tag: ghostty_point_tag_e = fullScreen ? GHOSTTY_POINT_SCREEN : GHOSTTY_POINT_VIEWPORT
+            var text = ghostty_text_s()
+            let sel = ghostty_selection_s(
+                top_left: ghostty_point_s(
+                    tag: tag,
+                    coord: GHOSTTY_POINT_COORD_TOP_LEFT,
+                    x: 0,
+                    y: 0),
+                bottom_right: ghostty_point_s(
+                    tag: tag,
+                    coord: GHOSTTY_POINT_COORD_BOTTOM_RIGHT,
+                    x: 0,
+                    y: 0),
+                rectangle: false)
+            guard ghostty_surface_read_text(surface, sel, &text) else { return nil }
+            defer { ghostty_surface_free_text(surface, &text) }
+            return String(cString: text.text)
+        }
+
         /// 端末で動いているフォアグラウンドプロセスの作業ディレクトリ。
         /// シェル統合 (OSC 7) に依存せず、PID から直接取得するので確実。
         /// 取得できなければ nil。
