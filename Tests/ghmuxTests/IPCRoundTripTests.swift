@@ -57,6 +57,26 @@ struct IPCRoundTripTests {
         #expect(response.paneId == "first")
     }
 
+    /// 引数なし起動の多重起動判定: 生きた GUI がいれば app.activate を送って true、いなければ false。
+    @Test func activateRunningInstanceDetectsLiveServer() throws {
+        let path = tempSocketPath()
+        var received: IPC.Command?
+        let server = IPCServer(socketPath: path) { request, respond in
+            received = request.command
+            // 自プロセスの pid を返す (NSRunningApplication で解決できる実在 pid)。
+            respond(.success(payload: String(ProcessInfo.processInfo.processIdentifier)))
+        }
+        try server.start()
+        defer { server.stop() }
+
+        #expect(activateRunningInstance(socketPath: path) == true)
+        #expect(received == .appActivate)
+    }
+
+    @Test func activateRunningInstanceIsFalseWithoutServer() {
+        #expect(activateRunningInstance(socketPath: tempSocketPath()) == false)
+    }
+
     @Test func handlerFailurePropagates() throws {
         let path = tempSocketPath()
         let server = IPCServer(socketPath: path) { _, respond in

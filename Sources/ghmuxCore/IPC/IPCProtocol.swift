@@ -42,6 +42,8 @@ public enum IPC {
         case workspaceNew = "workspace.new"
         /// 指定 (or 由来/選択中) ワークスペースを閉じる。
         case workspaceClose = "workspace.close"
+        /// 起動中 GUI を前面に出す (引数なし `ghmux` の多重起動時に使う)。応答 payload は GUI の pid。
+        case appActivate = "app.activate"
     }
 
     /// 分割方向。

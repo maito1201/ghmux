@@ -12,4 +12,10 @@ do {
     exit(64) // EX_USAGE
 }
 
+// 引数なし起動: 既に GUI が動いていれば、それを前面に出して終了する (2 個目の窓を作らない)。
+if activateRunningInstance() {
+    FileHandle.standardError.write(Data("ghmux: 既に起動中の ghmux を前面に出しました\n".utf8))
+    exit(0)
+}
+
 runApp()

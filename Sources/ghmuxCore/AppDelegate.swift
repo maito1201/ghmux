@@ -139,6 +139,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let id = mainWindowController.addWorkspace()
             return .success(payload: id)
 
+        case .appActivate:
+            // 引数なし `ghmux` が 2 個目として起動されたとき、こちら (既存 GUI) を前面に出す。
+            // 呼び出し側でも NSRunningApplication 経由で activate できるよう pid を返す。
+            NSApp.activate(ignoringOtherApps: true)
+            mainWindowController.window?.makeKeyAndOrderFront(nil)
+            return .success(payload: String(ProcessInfo.processInfo.processIdentifier))
+
         case .workspaceClose:
             // 明示指定 → 由来ペインのワークスペース → 選択中 の順で対象を決める。
             let target = request.workspaceId.flatMap { mainWindowController.workspace(withId: $0) }

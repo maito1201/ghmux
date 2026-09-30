@@ -71,7 +71,9 @@ struct IPCProtocolTests {
     }
 
     @Test func newCommandsRoundTrip() throws {
-        let commands: [IPC.Command] = [.paneList, .paneView, .paneClose, .workspaceNew, .workspaceClose]
+        let commands: [IPC.Command] = [
+            .paneList, .paneView, .paneClose, .workspaceNew, .workspaceClose, .appActivate,
+        ]
         for cmd in commands {
             let req = IPC.Request(command: cmd)
             #expect(try IPC.decodeRequest(IPC.encode(req)).command == cmd)
