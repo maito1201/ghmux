@@ -37,6 +37,26 @@ struct IPCRoundTripTests {
         #expect(received?.direction == .down)
     }
 
+    /// 多重起動: 2 個目の start() は throw し、かつ破棄されても 1 個目のソケットを消してはならない。
+    /// (以前は deinit → stop() → unlink で 1 個目のソケットファイルを消し、CLI が全滅していた)
+    @Test func secondServerDoesNotUnlinkFirstSocketOnFailure() throws {
+        let path = tempSocketPath()
+        let first = IPCServer(socketPath: path) { _, respond in respond(.success(paneId: "first")) }
+        try first.start()
+        defer { first.stop() }
+
+        do {
+            let second = IPCServer(socketPath: path) { _, respond in respond(.failure("unreachable")) }
+            #expect(throws: (any Error).self) { try second.start() }
+            second.stop() // 明示 stop でも 1 個目を巻き込まない
+        } // ここで second が deinit される
+
+        #expect(FileManager.default.fileExists(atPath: path))
+        let response = try IPCClient.send(IPC.Request(command: .paneList), socketPath: path)
+        #expect(response.ok)
+        #expect(response.paneId == "first")
+    }
+
     @Test func handlerFailurePropagates() throws {
         let path = tempSocketPath()
         let server = IPCServer(socketPath: path) { _, respond in

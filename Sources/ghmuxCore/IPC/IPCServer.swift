@@ -35,6 +35,9 @@ public final class IPCServer {
     private let queue = DispatchQueue(label: "com.ghmux.ipc.server")
     private var listenFD: Int32 = -1
     private var acceptSource: DispatchSourceRead?
+    /// このインスタンスが `socketPath` を bind したか。false のとき (多重起動で start に失敗した等)
+    /// stop()/deinit で unlink してはならない: 別の生きた ghmux のソケットを消してしまう。
+    private var ownsSocket = false
 
     public init(
         socketPath: String = IPC.defaultSocketPath,
@@ -79,10 +82,12 @@ public final class IPCServer {
             throw Error.bindFailed(errnoString())
         }
         chmod(socketPath, 0o600)
+        ownsSocket = true
 
         guard listen(fd, 8) == 0 else {
             close(fd)
             unlink(socketPath)
+            ownsSocket = false
             throw Error.listenFailed(errnoString())
         }
 
@@ -99,7 +104,10 @@ public final class IPCServer {
         acceptSource?.cancel()
         acceptSource = nil
         if listenFD >= 0 { listenFD = -1 }
+        // 自分が bind したソケットだけ消す (他インスタンスのソケットを巻き込まない)。
+        guard ownsSocket else { return }
         unlink(socketPath)
+        ownsSocket = false
     }
 
     // MARK: - 接続処理
