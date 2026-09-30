@@ -35,6 +35,12 @@ final class PaneViewController: NSViewController {
     private(set) var issueInfo: IPC.IssueInfo?
     /// 紐づく PR の最新状態 (URL キー)。監視のたびに更新し、紐付けが消えたら除去する。
     private var prInfos: [URL: IPC.PullRequestInfo] = [:]
+    /// URL で直接投入/紐付けされた PR。Issue の PR 探索 (`reconcilePRWatchers`) は GitHub 上の
+    /// 紐付け集合に無い PR を外すが、明示的に与えられた PR はその対象にしない。
+    private var explicitPRURLs: Set<URL> = []
+    /// PR の状態変化を自動プロンプトとして端末へ流すか。`pane attach --no-prompt` で false になる
+    /// (ヘッダ表示と監視だけ行い、端末には何も書き込まない)。ペイン単位で、最後の attach の指定が有効。
+    private var autoPromptEnabled = true
 
     /// `ghmux pane list` 用に、紐づく Issue と PR 群のスナップショットを返す。
     func githubSnapshot() -> (issue: IPC.IssueInfo?, pullRequests: [IPC.PullRequestInfo]) {
@@ -151,6 +157,36 @@ final class PaneViewController: NSViewController {
         handleIssueSubmission(urlString)
     }
 
+    /// `ghmux pane attach` のエラー。IPC 応答にそのまま載せる。
+    enum AttachError: Error, CustomStringConvertible {
+        case paneNotFound(String)
+        case invalidURL(String)
+
+        var description: String {
+            switch self {
+            case .paneNotFound(let id): return "ペインが見つかりません: \(id)"
+            case .invalidURL(let s): return "Issue / PR URL を解釈できません: \(s)"
+            }
+        }
+    }
+
+    /// 外部 (`ghmux pane attach`) からこのペインへ Issue/PR を紐付ける。
+    /// `assignIssue` と違い claude は起動しない: このペインで既に動いているエージェントに
+    /// ヘッダ表示と PR/CI 監視 (→ 自動プロンプト) だけを付け足す用途。
+    /// URL の形式検証は同期的に行い、取得・監視は非同期に始まる。
+    /// - autoPrompt: false なら CI 失敗などの自動プロンプトを端末へ流さない (表示・監視のみ)。
+    func attach(urlString: String, autoPrompt: Bool = true) throws {
+        guard let url = URL(string: urlString) else { throw AttachError.invalidURL(urlString) }
+        autoPromptEnabled = autoPrompt
+        if let parsed = try? GitHubClient.parseIssueUrl(url) {
+            handleIssue(url: url, parsed: parsed, launchAgent: false)
+        } else if (try? GitHubClient.parsePRUrl(url)) != nil {
+            handlePullRequest(url: url, launchAgent: false)
+        } else {
+            throw AttachError.invalidURL(urlString)
+        }
+    }
+
     private func handleIssueSubmission(_ urlString: String) {
         guard let url = URL(string: urlString) else {
             header.showIssueError("URL を解釈できません")
@@ -166,7 +202,28 @@ final class PaneViewController: NSViewController {
         }
     }
 
-    private func handleIssue(url: URL, parsed: (owner: String, repo: String, number: Int)) {
+    /// PTY へ書き込む ClaudeSession を作る。
+    private func makeSession() -> ClaudeSession {
+        ClaudeSession(
+            sink: { [weak self] text in self?.terminalHost.sendToTerminal(text) },
+            submit: { [weak self] in self?.terminalHost.submitLine() }
+        )
+    }
+
+    /// 自動プロンプトの送り先を用意する。
+    /// `launchAgent` が true なら新しいセッションで claude を起動する (`start` は 1 回きりなので毎回新規)。
+    /// false なら起動せず、既存セッションが無ければ「起動済みのエージェントへ送るだけ」のセッションを作る。
+    private func prepareSession(launchAgent: Bool) -> ClaudeSession {
+        if let session, !launchAgent { return session }
+        let created = makeSession()
+        session = created
+        return created
+    }
+
+    /// - launchAgent: true なら Issue を初回プロンプトにして claude を起動する。false (attach) なら紐付けと監視のみ。
+    private func handleIssue(
+        url: URL, parsed: (owner: String, repo: String, number: Int), launchAgent: Bool = true
+    ) {
         Task { @MainActor in
             do {
                 let issue = try await client.fetchIssue(url: url)
@@ -176,16 +233,14 @@ final class PaneViewController: NSViewController {
 
                 // ClaudeSession を起動 (PTY へ claude コマンドを送る)。
                 // 本文はペーストで投入し、Enter で実行確定する (bracketed paste 対策)。
-                let session = ClaudeSession(
-                    sink: { [weak self] text in self?.terminalHost.sendToTerminal(text) },
-                    submit: { [weak self] in self?.terminalHost.submitLine() }
-                )
-                self.session = session
-                session.start(
-                    issue: issue,
-                    promptTemplate: config.initialPrompt,
-                    agentCommand: config.agentCommand
-                )
+                let session = prepareSession(launchAgent: launchAgent)
+                if launchAgent {
+                    session.start(
+                        issue: issue,
+                        promptTemplate: config.initialPrompt,
+                        agentCommand: config.agentCommand
+                    )
+                }
 
                 // Issue 自体の Open/Close も継続監視する (作業中に閉じられることがある)。
                 startIssueWatching(url: issue.url)
@@ -202,26 +257,29 @@ final class PaneViewController: NSViewController {
     /// PR URL を直接投入したときの処理。Issue を介さず、投入された PR を起点に
     /// claude を起動し、その PR を `PullRequestWatcher` で監視する (CI 失敗時等の
     /// 自動プロンプトは Issue 経由の PR と共通フロー)。
-    private func handlePullRequest(url: URL) {
+    /// - launchAgent: true なら PR を初回プロンプトにして claude を起動する。false (attach) なら紐付けと監視のみ。
+    private func handlePullRequest(url: URL, launchAgent: Bool = true) {
+        explicitPRURLs.insert(url)
         Task { @MainActor in
             do {
                 let pr = try await client.fetchPullRequest(url: url)
                 // 上部に PR タイトルを表示しつつ、下に PR 行 (CI/状態) も出す。
+                // Issue が既に載っているペインへの attach ではヘッドラインは Issue のまま残し、PR 行だけ足す。
                 let ci = GitHub.CIStatus.roll(pr.statusCheckRollup ?? [])
-                header.showPRHeadline(title: pr.title, number: pr.number, url: pr.url)
+                if issueInfo == nil {
+                    header.showPRHeadline(title: pr.title, number: pr.number, url: pr.url)
+                }
                 header.updatePR(url: pr.url, number: pr.number, state: pr.state, ci: ci)
                 self.prInfos[url] = IPC.PullRequestInfo(pr: pr, ci: ci)
 
-                let session = ClaudeSession(
-                    sink: { [weak self] text in self?.terminalHost.sendToTerminal(text) },
-                    submit: { [weak self] in self?.terminalHost.submitLine() }
-                )
-                self.session = session
-                session.start(
-                    pullRequest: pr,
-                    promptTemplate: config.prInitialPrompt,
-                    agentCommand: config.agentCommand
-                )
+                let session = prepareSession(launchAgent: launchAgent)
+                if launchAgent {
+                    session.start(
+                        pullRequest: pr,
+                        promptTemplate: config.prInitialPrompt,
+                        agentCommand: config.agentCommand
+                    )
+                }
 
                 // 投入された PR を直接監視する (Issue 経由と同じ watcher / 自動プロンプト)。
                 prWatchTasks[url]?.cancel()
@@ -260,14 +318,15 @@ final class PaneViewController: NSViewController {
     @MainActor
     private func reconcilePRWatchers(_ urls: [URL]) {
         let current = Set(urls)
-        // 紐付けが消えた PR は監視終了 + 行削除 + スナップショット除去。
-        for url in prWatchTasks.keys where !current.contains(url) {
+        // 紐付けが消えた PR は監視終了 + 行削除 + スナップショット除去 (明示的に与えられた PR は残す)。
+        for url in prWatchTasks.keys where !current.contains(url) && !explicitPRURLs.contains(url) {
             prWatchTasks[url]?.cancel()
             prWatchTasks[url] = nil
             prInfos[url] = nil
             header.removePR(url: url)
         }
-        guard !urls.isEmpty else {
+        // 探索結果も明示 PR も無いときだけ「探索中」表示 (showPRSearching は PR 行を全消しする)。
+        guard !urls.isEmpty || !prWatchTasks.isEmpty else {
             header.showPRSearching()
             return
         }
@@ -331,6 +390,10 @@ final class PaneViewController: NSViewController {
 
     /// PR の状態変化イベントを自動プロンプトに変換して claude へ送る。
     private func handleEvents(_ events: [PullRequestWatcher.Event], prURL: URL) {
+        guard autoPromptEnabled else {
+            if !events.isEmpty { log.info("auto-prompt disabled (--no-prompt): \(prURL.absoluteString)") }
+            return
+        }
         for event in events {
             guard let prompt = autoPromptRules.prompt(for: event, prURL: prURL) else { continue }
             // クールダウンは PR ごとに分ける (別 PR の同種イベントを巻き込まない)。

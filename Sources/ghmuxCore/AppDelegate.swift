@@ -95,6 +95,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             workspace.sendToPane(paneId: paneId, text: text, submit: request.submit ?? true)
             return .success(payload: paneId)
 
+        case .paneAttach:
+            // 既存ペインへ Issue/PR を紐付ける。claude は起動しない (pane new --issue との違い)。
+            // 対象は明示 pane_id 必須 (pane send と同じく誤紐付けを避ける)。
+            guard let paneId = request.paneId else {
+                return .failure("ペイン ID が指定されていません")
+            }
+            guard let urlString = request.issueURL else {
+                return .failure("紐付ける URL が指定されていません")
+            }
+            guard let workspace = mainWindowController.workspace(containingPaneId: paneId) else {
+                return .failure("ペインが見つかりません: \(paneId)")
+            }
+            do {
+                try workspace.attachToPane(
+                    paneId: paneId, urlString: urlString, autoPrompt: request.autoPrompt ?? true)
+            } catch {
+                return .failure(String(describing: error))
+            }
+            return .success(payload: paneId)
+
         case .paneClose:
             // 明示指定 → 由来ペイン の順で対象を決める。
             let targetId = request.paneId ?? request.origin

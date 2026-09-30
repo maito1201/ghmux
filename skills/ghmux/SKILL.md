@@ -124,6 +124,27 @@ ghmux pane send <pane_id> "git status" --no-enter  # 入力欄に置くだけ (�
 
 > ⚠️ 既定で実行まで行うため、`<pane_id>` を取り違えると意図しないペインでコマンドが走ります。送信前に `pane list` で対象を確認してください。
 
+### `ghmux pane attach <pane_id> <URL> [--no-prompt]`
+
+**既存のペイン**に GitHub の Issue または PR の URL を紐付けます。`pane new --issue` と違い **claude は起動しません**。そのペインで既に動いているエージェントに、ヘッダ表示と PR/CI 監視（CI 失敗・レビュー追加などの自動プロンプト）だけを付け足す用途です。
+
+- `<pane_id>`: 紐付け先（**明示必須**。誤紐付けを避けるため由来ペインへの暗黙フォールバックはしません）。自分のペインなら `$GHMUX_PANE`。
+- `<URL>`: Issue URL または PR URL。それ以外は stderr にエラー、終了コード 1。
+- Issue URL: Issue をヘッダに表示し、その Issue を参照する PR の探索と CI 監視を始めます。
+- PR URL: PR 行を追加して CI 監視を始めます。ペインに既に Issue が載っていればヘッドラインは Issue のまま残し、PR 行だけ足します。紐付けた PR は Issue の PR 探索結果に無くても外されません。
+- 紐付け後、CI 失敗などの状態変化は**そのペインの端末へ自動プロンプトとして投入**されます（`pane send` と同じ経路）。
+- `--no-prompt`: 自動プロンプトを流さず、ヘッダ表示と CI 監視（`pane list` での状態確認）だけ行います。そのペインで claude が動いていない、または人間が手動で対処したいときに使います。設定はペイン単位で、同じペインへ再度 attach したときは最後の指定が有効です。
+- URL の形式検証は同期、GitHub からの取得・監視は非同期です。`pane list` への反映まで数秒かかります。取得失敗はペインのヘッダに表示されます。
+- **出力**: 紐付け先 `<pane_id>`（成功時）。ペインが見つからなければ stderr にエラー、終了コード 1。
+
+```sh
+ghmux pane attach "$GHMUX_PANE" https://github.com/owner/repo/pull/43   # 自分のペインに作成した PR を紐付け
+ghmux pane attach <pane_id> https://github.com/owner/repo/issues/42       # 別ペインに Issue を紐付け
+ghmux pane attach <pane_id> https://github.com/owner/repo/pull/43 --no-prompt  # 監視のみ (端末へは何も流さない)
+```
+
+> 💡 Claude が会話の中で PR を作成したら、この作成直後に自分のペインへ紐付けておくと、以後 CI が落ちたときに ghmux から自動で通知 (プロンプト) が届きます。
+
 ### `ghmux pane close [<pane_id>]`
 
 ペインを閉じます。
@@ -168,6 +189,13 @@ ghmux pane list                                   # 全体像と ID を取得
 ghmux pane view <pane_id> --lines 200              # 特定ペインの直近を確認 (範囲を絞る)
 ghmux pane list | jq '.workspaces[].panes[]
   | select(.pullRequests[]?.ci == "failure")'      # CI 失敗中のペインを抽出
+```
+
+**会話中に作った PR を自分のペインへ紐付ける**（以後 CI 失敗が自動プロンプトで届く）:
+
+```sh
+gh pr create --fill                                # → https://github.com/owner/repo/pull/43
+ghmux pane attach "$GHMUX_PANE" https://github.com/owner/repo/pull/43
 ```
 
 **別ペインへ作業を指示する**（`pane list` で対象を確認してから送る）:

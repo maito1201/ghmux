@@ -302,6 +302,15 @@ final class WorkspaceViewController: NSViewController {
         return true
     }
 
+    /// 指定 ID のペインへ Issue/PR を紐付ける (`ghmux pane attach` 用)。
+    /// URL が Issue/PR として解釈できなければ throw する。ID 不在は呼び出し側で弾く前提 (throw で報告)。
+    func attachToPane(paneId: String, urlString: String, autoPrompt: Bool) throws {
+        guard let pane = pane(withId: paneId) else {
+            throw PaneViewController.AttachError.paneNotFound(paneId)
+        }
+        try pane.attach(urlString: urlString, autoPrompt: autoPrompt)
+    }
+
     /// 指定 ID のペインを閉じる (`ghmux pane close` 用)。
     /// 最後の 1 枚 or ID 不在なら false (`closePane(_:)` と同じく最後のペインは残す)。
     @discardableResult

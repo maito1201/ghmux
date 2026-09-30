@@ -36,6 +36,8 @@ public enum IPC {
         case paneClose = "pane.close"
         /// 指定ペインへ文字列を送る (任意で Enter 実行)。
         case paneSend = "pane.send"
+        /// 指定ペインへ Issue/PR を紐付ける (エージェントは起動しない)。
+        case paneAttach = "pane.attach"
         /// 新しいワークスペースを作成する。
         case workspaceNew = "workspace.new"
         /// 指定 (or 由来/選択中) ワークスペースを閉じる。
@@ -61,7 +63,8 @@ public enum IPC {
         /// プロトコルバージョン。
         public var v: Int
         public var command: Command
-        /// アサインする Issue の URL (任意)。nil なら Issue 無しでペインを開く。
+        /// アサインする Issue/PR の URL。`pane new` では任意 (nil なら Issue 無しでペインを開く)、
+        /// `pane attach` では必須。
         public var issueURL: String?
         /// 由来ペインの ID (GHMUX_PANE)。nil なら GUI 側でアクティブペインにフォールバック。
         public var origin: String?
@@ -69,7 +72,7 @@ public enum IPC {
         public var direction: Direction
         /// 新ペインの作業ディレクトリ。省略時は由来ペインの cwd を引き継ぐ。
         public var workingDirectory: String?
-        /// 操作対象ペインの ID (`pane view` / `pane close`)。
+        /// 操作対象ペインの ID (`pane view` / `pane send` / `pane attach` / `pane close`)。
         public var paneId: String?
         /// 操作対象ワークスペースの ID (`workspace close`)。
         public var workspaceId: String?
@@ -81,6 +84,8 @@ public enum IPC {
         public var text: String?
         /// `pane send` で送出後に Enter で実行確定するか。nil は true 相当 (既定で実行)。
         public var submit: Bool?
+        /// `pane attach` で CI 失敗などの自動プロンプトを端末へ流すか。nil は true 相当 (既定で流す)。
+        public var autoPrompt: Bool?
 
         public init(
             command: Command,
@@ -94,6 +99,7 @@ public enum IPC {
             lines: Int? = nil,
             text: String? = nil,
             submit: Bool? = nil,
+            autoPrompt: Bool? = nil,
             v: Int = IPC.version
         ) {
             self.v = v
@@ -108,6 +114,7 @@ public enum IPC {
             self.lines = lines
             self.text = text
             self.submit = submit
+            self.autoPrompt = autoPrompt
         }
     }
 

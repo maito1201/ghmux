@@ -91,6 +91,17 @@ struct IPCProtocolTests {
         #expect(decoded.viewScope == .viewport)
     }
 
+    @Test func paneAttachRequestRoundTrips() throws {
+        let req = IPC.Request(
+            command: .paneAttach, issueURL: "https://github.com/o/r/pull/7", paneId: "pane-1", autoPrompt: false)
+        let decoded = try IPC.decodeRequest(try IPC.encode(req))
+        #expect(decoded == req)
+        #expect(decoded.command == .paneAttach)
+        #expect(decoded.paneId == "pane-1")
+        #expect(decoded.issueURL == "https://github.com/o/r/pull/7")
+        #expect(decoded.autoPrompt == false)
+    }
+
     @Test func paneSendRequestRoundTrips() throws {
         let req = IPC.Request(command: .paneSend, paneId: "pane-1", text: "npm test", submit: false)
         let decoded = try IPC.decodeRequest(try IPC.encode(req))

@@ -157,6 +157,49 @@ struct CLIParserTests {
         }
     }
 
+    // MARK: - pane attach
+
+    @Test func paneAttach() throws {
+        let req = try CLIParser.parse(
+            ["ghmux", "pane", "attach", "PANE-1", "https://github.com/o/r/pull/7"])
+        #expect(req?.command == .paneAttach)
+        #expect(req?.paneId == "PANE-1")
+        #expect(req?.issueURL == "https://github.com/o/r/pull/7")
+        #expect(req?.autoPrompt == true) // 既定は自動プロンプトを流す
+    }
+
+    @Test func paneAttachNoPrompt() throws {
+        let req = try CLIParser.parse(
+            ["ghmux", "pane", "attach", "PANE-1", "https://github.com/o/r/pull/7", "--no-prompt"])
+        #expect(req?.paneId == "PANE-1")
+        #expect(req?.issueURL == "https://github.com/o/r/pull/7")
+        #expect(req?.autoPrompt == false)
+    }
+
+    @Test func paneAttachMissingPaneIdThrows() {
+        #expect(throws: CLIParser.Error.missingArgument("<pane_id>")) {
+            try CLIParser.parse(["ghmux", "pane", "attach"])
+        }
+    }
+
+    @Test func paneAttachMissingURLThrows() {
+        #expect(throws: CLIParser.Error.missingArgument("<URL>")) {
+            try CLIParser.parse(["ghmux", "pane", "attach", "PANE-1"])
+        }
+    }
+
+    @Test func paneAttachRejectsExtraPositional() {
+        #expect(throws: CLIParser.Error.unexpectedArgument("extra")) {
+            try CLIParser.parse(["ghmux", "pane", "attach", "PANE-1", "https://x/pull/1", "extra"])
+        }
+    }
+
+    @Test func paneAttachUnknownFlagThrows() {
+        #expect(throws: CLIParser.Error.unknownFlag("--frob")) {
+            try CLIParser.parse(["ghmux", "pane", "attach", "PANE-1", "https://x/pull/1", "--frob"])
+        }
+    }
+
     @Test func paneCloseWithoutId() throws {
         let req = try CLIParser.parse(["ghmux", "pane", "close"])
         #expect(req?.command == .paneClose)

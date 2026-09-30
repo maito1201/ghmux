@@ -42,6 +42,7 @@ public enum CLIParser {
       ghmux pane list
       ghmux pane view <pane_id> [--viewport] [--lines <N>]
       ghmux pane send <pane_id> <command> [--no-enter]
+      ghmux pane attach <pane_id> <URL> [--no-prompt]
       ghmux pane close [<pane_id>]
       ghmux workspace new
       ghmux workspace close [<workspace_id>]
@@ -88,6 +89,8 @@ public enum CLIParser {
             return try parsePaneView(rest)
         case "send":
             return try parsePaneSend(rest)
+        case "attach":
+            return try parsePaneAttach(rest)
         case "close":
             let paneId = try optionalPositional(rest, context: "pane close")
             return IPC.Request(command: .paneClose, paneId: paneId)
@@ -192,6 +195,30 @@ public enum CLIParser {
         guard let paneId else { throw Error.missingArgument("<pane_id>") }
         guard let command else { throw Error.missingArgument("<command>") }
         return IPC.Request(command: .paneSend, paneId: paneId, text: command, submit: submit)
+    }
+
+    /// `pane attach <pane_id> <URL> [--no-prompt]`: 位置引数 2 つ + 自動プロンプト抑止フラグ。
+    private static func parsePaneAttach(_ args: [String]) throws -> IPC.Request {
+        var paneId: String?
+        var url: String?
+        var autoPrompt = true
+        for arg in args {
+            if arg == "--no-prompt" {
+                autoPrompt = false
+                continue
+            }
+            if arg.hasPrefix("--") { throw Error.unknownFlag(arg) }
+            if paneId == nil {
+                paneId = arg
+            } else if url == nil {
+                url = arg
+            } else {
+                throw Error.unexpectedArgument(arg)
+            }
+        }
+        guard let paneId else { throw Error.missingArgument("<pane_id>") }
+        guard let url else { throw Error.missingArgument("<URL>") }
+        return IPC.Request(command: .paneAttach, issueURL: url, paneId: paneId, autoPrompt: autoPrompt)
     }
 
     // MARK: - workspace サブコマンド
